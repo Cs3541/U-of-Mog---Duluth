@@ -4,8 +4,10 @@
 
 // clang-format off
 
-#include "generated_plugin_registrant.h"
+namespace flutter {
+class PluginRegistry;
+}
 
 
-void RegisterPlugins(flutter::PluginRegistry* registry) {
+void RegisterPlugins(flutter::PluginRegistry*) {
 }
