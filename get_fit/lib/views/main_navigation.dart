@@ -1,5 +1,7 @@
 
 import 'package:flutter/material.dart';
+import '../home_screen.dart';
+import 'profile_screen.dart';
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
@@ -12,13 +14,13 @@ class _MainNavigationState extends State<MainNavigation> {
   int _selectedIndex = 0;
 
   final List<Widget> _screens = [
-    const Center(child: Text('Home')),
+    const HomeScreen(),
     const Center(child: Text('Workouts')),
     const Center(child: Text('Progress')),
     const Center(child: Text('Events')),
-    const Center(child: Text('Profile')),
-    const Center(child: Text('Badges')),
     const Center(child: Text('LeaderBoard')),
+    const Center(child: Text('Badges')),
+    ProfileScreen(),
   ];
 
   @override
