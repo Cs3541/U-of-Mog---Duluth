@@ -60,5 +60,9 @@ class ExpRules {
     });
   }
 
-  static int levelForExp(int totalExp) => totalExp ~/ expPerLevel + 1; // 100 exp per Level. (Simple 100 exp per level system for now)
+  static int levelForExp(int totalExp) {
+    if (totalExp <= 0) return 1;
+    int level = ((1 + sqrt(1 + 8 * totalExp / 100)) / 2).floor();
+    return level + 1;
+  }
 }
