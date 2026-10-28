@@ -18,7 +18,7 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final email = _presenter.currentUserEmail ?? 'Unknown User';
+    final email = _presenter.getCurrentUserEmail() ?? 'Unknown User';
 
     return Scaffold(
       appBar: AppBar(
