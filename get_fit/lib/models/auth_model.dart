@@ -4,7 +4,7 @@ class AuthModel {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   // Sign in with email and password
-  Future<User?> login(String email, String password) async {
+  Future<String?> login(String email, String password) async {
     try {
       await _auth.signInWithEmailAndPassword(email: email, password: password);
       return null;

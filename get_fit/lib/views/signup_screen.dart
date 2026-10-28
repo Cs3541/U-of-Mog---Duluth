@@ -43,7 +43,7 @@ class _SignupScreenState extends State<SignupScreen> {
       // Navigate to the main navigation screen on successful signup
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
+        MaterialPageRoute(builder: (_) => const MainNavigation()),
       );
     }
   }
