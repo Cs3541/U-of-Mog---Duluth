@@ -14,20 +14,32 @@ class ExpRules {
   static const int expPerMinute = 1;
   static const int maxExpPerActivity = 100;
   static const int expPerLevel = 100;
+  static const int streakBonusPerDay = 5;
 
-  static int expForActivity({ required int durationMinutes }) {
+  static int expForActivity({
+    required int durationMinutes,
+    int streakDays = 0,
+  }) {
     if (durationMinutes <= 0) return 0;
     final raw = completionBonus + durationMinutes * expPerMinute;
-    return min(raw.round(), maxExpPerActivity);
+    final capped = min(raw, maxExpPerActivity);
+    final bonus = streakBonusPerDay * streakDays;
+    return capped + bonus;
   }
 
-  Future<void> addActivityExp(String uid, int durationMinutes) async {
+  static Future<void> addActivityExp(
+    String uid,
+    int durationMinutes, {
+    int streakDays = 0,
+  }) async {
     final ref = FirebaseDatabase.instance.ref('users/$uid/totalExp');
     final snapshot = await ref.get();
     final currentExp = (snapshot.value as int?) ?? 0;
-    final gained = ExpRules.expForActivity(durationMinutes: durationMinutes);
-    final newExp = currentExp + gained;
-    await ref.set(newExp);
+    final gained = expForActivity(
+      durationMinutes: durationMinutes,
+      streakDays: streakDays,
+    );
+    await ref.set(currentExp + gained);
   }
 
   static int levelForExp(int totalExp) => totalExp ~/ expPerLevel + 1; // 100 exp per Level. (Simple 100 exp per level system for now)
