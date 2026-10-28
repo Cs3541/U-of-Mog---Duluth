@@ -24,12 +24,12 @@ class _LoginScreenState extends State<LoginScreen> {
     );
 
     if (error != null) {
-      setState(() => _errorMessage = error);
+      setState(() => _errorMessage = error.toString());
     } else {
       // Navigate to the main navigation screen on successful login
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
+        MaterialPageRoute(builder: (_) => const MainNavigation()),
       );
     }
   }
