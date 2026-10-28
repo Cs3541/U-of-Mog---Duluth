@@ -16,6 +16,9 @@ class _MainNavigationState extends State<MainNavigation> {
     const Center(child: Text('Workouts')),
     const Center(child: Text('Progress')),
     const Center(child: Text('Events')),
+    const Center(child: Text('Profile')),
+    const Center(child: Text('Badges')),
+    const Center(child: Text('LeaderBoard')),
   ];
 
   @override
@@ -55,6 +58,18 @@ class _MainNavigationState extends State<MainNavigation> {
           BottomNavigationBarItem(
             icon: Icon(Icons.event),
             label: 'Events',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.leaderboard),
+            label: 'LeaderBoard',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.emoji_events),
+            label: 'Badges',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person),
+            label: 'Profile',
           ),
         ],
       ),
