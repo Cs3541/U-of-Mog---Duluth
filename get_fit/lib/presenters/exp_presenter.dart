@@ -1,2 +1,5 @@
-import 'package:flutter/material.dart';
 import '../models/exp_model.dart';
+
+class ExpPresenter {
+  Stream<ExpStatus> watchExp(String uid) => ExpRules.watchExp(uid);
+}
