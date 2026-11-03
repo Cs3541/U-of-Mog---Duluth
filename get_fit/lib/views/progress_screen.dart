@@ -1,0 +1,17 @@
+import 'package:flutter/material.dart';
+
+class ProgressScreen extends StatefulWidget {
+  const ProgressScreen({super.key});
+
+  @override
+  State<ProgressScreen> createState() => ProgressScreenState();
+}
+
+class ProgressScreenState extends State<ProgressScreen> {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Progress'))
+    );
+  }
+}
