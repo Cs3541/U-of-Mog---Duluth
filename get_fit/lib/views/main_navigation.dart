@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import '../home_screen.dart';
 import 'profile_screen.dart';
+import 'badges_screen.dart';
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
@@ -19,7 +20,7 @@ class _MainNavigationState extends State<MainNavigation> {
     const Center(child: Text('Progress')),
     const Center(child: Text('Events')),
     const Center(child: Text('LeaderBoard')),
-    const Center(child: Text('Badges')),
+    BadgesScreen(),
     ProfileScreen(),
   ];
 
