@@ -1,5 +1,6 @@
 
 import 'package:flutter/material.dart';
+import 'package:get_fit/views/progress_screen.dart';
 import '../home_screen.dart';
 import 'profile_screen.dart';
 import 'badges_screen.dart';
@@ -17,7 +18,7 @@ class _MainNavigationState extends State<MainNavigation> {
   final List<Widget> _screens = [
     const HomeScreen(),
     const Center(child: Text('Workouts')),
-    const Center(child: Text('Progress')),
+    const ProgressScreen(),
     const Center(child: Text('Events')),
     const Center(child: Text('LeaderBoard')),
     BadgesScreen(),
