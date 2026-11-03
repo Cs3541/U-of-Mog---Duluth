@@ -1,5 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
-
 import '../models/auth_model.dart';
 
 class AuthPresenter {
@@ -20,4 +18,6 @@ class AuthPresenter {
   Stream authStateChanges() => _model.authStateChanges();
 
   String? getCurrentUserEmail() => _model.getCurrentUser()?.email;
+
+  String? getCurrentUserId() => _model.getCurrentUser()?.uid;
 }

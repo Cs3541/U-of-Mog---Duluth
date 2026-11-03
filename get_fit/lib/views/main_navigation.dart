@@ -1,6 +1,9 @@
 
 import 'package:flutter/material.dart';
 import 'package:get_fit/views/progress_screen.dart';
+import '../home_screen.dart';
+import 'profile_screen.dart';
+import 'badges_screen.dart';
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
@@ -13,10 +16,13 @@ class _MainNavigationState extends State<MainNavigation> {
   int _selectedIndex = 0;
 
   final List<Widget> _screens = [
-    const Center(child: Text('Home')),
+    const HomeScreen(),
     const Center(child: Text('Workouts')),
     const ProgressScreen(),
     const Center(child: Text('Events')),
+    const Center(child: Text('LeaderBoard')),
+    BadgesScreen(),
+    ProfileScreen(),
   ];
 
   @override
@@ -56,6 +62,18 @@ class _MainNavigationState extends State<MainNavigation> {
           BottomNavigationBarItem(
             icon: Icon(Icons.event),
             label: 'Events',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.leaderboard),
+            label: 'LeaderBoard',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.emoji_events),
+            label: 'Badges',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person),
+            label: 'Profile',
           ),
         ],
       ),
