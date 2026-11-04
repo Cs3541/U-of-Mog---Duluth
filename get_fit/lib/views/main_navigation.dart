@@ -4,6 +4,7 @@ import 'package:get_fit/views/progress_screen.dart';
 import '../home_screen.dart';
 import 'profile_screen.dart';
 import 'badges_screen.dart';
+import 'events_screen.dart';
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
@@ -19,7 +20,7 @@ class _MainNavigationState extends State<MainNavigation> {
     const HomeScreen(),
     const Center(child: Text('Workouts')),
     const ProgressScreen(),
-    const Center(child: Text('Events')),
+    const EventsScreen(),
     const Center(child: Text('LeaderBoard')),
     BadgesScreen(),
     ProfileScreen(),
