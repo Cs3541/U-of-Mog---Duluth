@@ -1,6 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_database/firebase_database.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class Workout {
   final String? id;
@@ -15,58 +14,45 @@ class Workout {
     required this.muscle,
   });
 
-  static Future<List<Workout>> loadWorkouts() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
+  static CollectionReference<Map<String, dynamic>> get _col =>
+      FirebaseFirestore.instance.collection('workouts');
+
+  static void _requireUser() {
+    if (FirebaseAuth.instance.currentUser == null) {
       throw Exception('User not authenticated');
     }
-
-    final databaseRef = FirebaseDatabase.instance.ref();
-    final workoutsSnapshot = await databaseRef.child('workouts').get();
-
-    if (!workoutsSnapshot.exists) {
-      return [];
-    }
-
-    final workoutsData = workoutsSnapshot.value as Map<dynamic, dynamic>;
-    final List<Workout> workouts = [];
-
-    workoutsData.forEach((key, value) {
-      final workoutData = value as Map<dynamic, dynamic>;
-      final workout = Workout(
-        id: key,
-        workoutName: workoutData['workoutName'] as String?,
-        muscleGroup: workoutData['muscleGroup'] as String?,
-        muscle: workoutData['muscle'] as String?,
-      );
-      workouts.add(workout);
-    });
-
-    return workouts;
   }
 
-  static Future<void> addWorkout(Workout workout) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      throw Exception('User not authenticated');
-    }
+  static Future<List<Workout>> loadWorkouts() async {
+    _requireUser();
 
-    final databaseRef = FirebaseDatabase.instance.ref();
-    final newWorkoutRef = databaseRef.child('workouts').push();
-    await newWorkoutRef.set({
+    final snapshot = await _col.get();
+
+    return snapshot.docs.map((doc) {
+      final data = doc.data();
+      return Workout(
+        id: doc.id,
+        workoutName: data['workoutName'] as String?,
+        muscleGroup: data['muscleGroup'] as String?,
+        muscle: data['muscle'] as String?,
+      );
+    }).toList();
+  }
+
+  /// Saves the workout and returns the new document's id.
+  static Future<String> addWorkout(Workout workout) async {
+    _requireUser();
+
+    final docRef = await _col.add({
       'workoutName': workout.workoutName,
       'muscleGroup': workout.muscleGroup,
       'muscle': workout.muscle,
     });
+    return docRef.id;
   }
 
   static Future<void> deleteWorkout(String workoutId) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      throw Exception('User not authenticated');
-    }
-
-    final databaseRef = FirebaseDatabase.instance.ref();
-    await databaseRef.child('workouts/$workoutId').remove();
+    _requireUser();
+    await _col.doc(workoutId).delete();
   }
 }

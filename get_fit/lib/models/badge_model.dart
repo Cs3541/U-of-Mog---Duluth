@@ -1,4 +1,3 @@
-import 'package:firebase_database/firebase_database.dart';
 import 'exp_model.dart';
 
 enum MilestoneType {
@@ -84,12 +83,13 @@ class BadgeRules {
   ];
 
   static Future<List<BadgeProgress>> getBadgeProgress(String uid) async {
-    final snapshot = await FirebaseDatabase.instance.ref('users/$uid').get();
-    final data = (snapshot.value as Map?) ?? {};
+    final snapshot = await ExpRules.userDoc(uid).get();
+    final data = snapshot.data() ?? {};
 
-    final workouts = (data['workoutsCompleted'] as int?) ?? 0;
-    final streak = (data['streakDays'] as int?) ?? 0;
-    final level = ExpRules.levelForExp((data['totalExp'] as int?) ?? 0);
+    final workouts = (data['workoutsCompleted'] as num?)?.toInt() ?? 0;
+    final streak = (data['streakDays'] as num?)?.toInt() ?? 0;
+    final level =
+        ExpRules.levelForExp((data['totalExp'] as num?)?.toInt() ?? 0);
 
     return allBadges.map((b) {
       final progress = switch (b.type) {

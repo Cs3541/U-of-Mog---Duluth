@@ -1,5 +1,5 @@
 import 'dart:math';
-import 'package:firebase_database/firebase_database.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ExpAwardResult {
   final int expGained;
@@ -38,6 +38,10 @@ class ExpRules {
   static const int streakBonusPerDay = 5;
   static const int maxStreakBonus = 150;
 
+  // The user's profile document: users/{uid}
+  static DocumentReference<Map<String, dynamic>> userDoc(String uid) =>
+      FirebaseFirestore.instance.collection('users').doc(uid);
+
   static int expForActivity({
     required int durationMinutes,
     required int streakDays,
@@ -52,30 +56,39 @@ class ExpRules {
   static String _dateKey(DateTime d) => d.toString().substring(0, 10);
 
   static Future<void> addActivityExp(String uid, int durationMinutes) async {
-    final ref = FirebaseDatabase.instance.ref('users/$uid');
-    final snapshot = await ref.get();
-    final data = (snapshot.value as Map?) ?? {};
-    final currentExp = (data['totalExp'] as num?)?.toInt() ?? 0;
-    final lastDate = data['lastStreakDate'] as String?;
-    final today = _dateKey(DateTime.now());
-    final yesterday =
-        _dateKey(DateTime.now().subtract(const Duration(days: 1)));
-    int streak = (data['streakDays'] as num?)?.toInt() ?? 0;
-    int bonusDays = 0;
-    if (lastDate != today) {
-      streak = (lastDate == yesterday) ? streak + 1 : 1;
-      bonusDays = streak;
-    }
+    final ref = userDoc(uid);
 
-    final gained = expForActivity(
-      durationMinutes: durationMinutes,
-      streakDays: bonusDays,
-    );
+    await FirebaseFirestore.instance.runTransaction((tx) async {
+      final snapshot = await tx.get(ref);
+      final data = snapshot.data() ?? {};
 
-    await ref.update({
-      'totalExp': currentExp + gained,
-      'streakDays': streak,
-      'lastStreakDate': today,
+      final currentExp = (data['totalExp'] as num?)?.toInt() ?? 0;
+      final lastDate = data['lastStreakDate'] as String?;
+      final today = _dateKey(DateTime.now());
+      final yesterday =
+          _dateKey(DateTime.now().subtract(const Duration(days: 1)));
+
+      int streak = (data['streakDays'] as num?)?.toInt() ?? 0;
+      int bonusDays = 0;
+      if (lastDate != today) {
+        streak = (lastDate == yesterday) ? streak + 1 : 1;
+        bonusDays = streak;
+      }
+
+      final gained = expForActivity(
+        durationMinutes: durationMinutes,
+        streakDays: bonusDays,
+      );
+
+      tx.set(
+        ref,
+        {
+          'totalExp': currentExp + gained,
+          'streakDays': streak,
+          'lastStreakDate': today,
+        },
+        SetOptions(merge: true),
+      );
     });
   }
 
@@ -101,13 +114,14 @@ class ExpRules {
   }
 
   static Stream<ExpStatus> watchExp(String uid) {
-    return FirebaseDatabase.instance.ref('users/$uid').onValue.map((event) {
-      final data = (event.snapshot.value as Map?) ?? {};
+    return userDoc(uid).snapshots().map((snapshot) {
+      final data = snapshot.data() ?? {};
       final total = (data['totalExp'] as num?)?.toInt() ?? 0;
       int streak = (data['streakDays'] as num?)?.toInt() ?? 0;
       final lastDate = data['lastStreakDate'] as String?;
       final today = _dateKey(DateTime.now());
-      final yesterday = _dateKey(DateTime.now().subtract(const Duration(days: 1)));
+      final yesterday =
+          _dateKey(DateTime.now().subtract(const Duration(days: 1)));
       if (lastDate != today && lastDate != yesterday) streak = 0;
 
       return statusFor(total, streak);

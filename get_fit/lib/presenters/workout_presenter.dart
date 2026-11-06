@@ -12,8 +12,13 @@ class WorkoutPresenter {
   }
 
   Future<void> addWorkout(Workout workout) async {
-    await Workout.addWorkout(workout);
-    _workouts.add(workout);
+    final id = await Workout.addWorkout(workout);
+    _workouts.add(Workout(
+      id: id,
+      workoutName: workout.workoutName,
+      muscleGroup: workout.muscleGroup,
+      muscle: workout.muscle,
+    ));
   }
 
   Future<void> deleteWorkout(String workoutId) async {
