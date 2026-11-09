@@ -1,6 +1,8 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'exp_model.dart';
 
 enum MilestoneType {
+  newUser,
   workoutsCompleted,
   streakDays,
   levelReached,
@@ -38,6 +40,13 @@ class BadgeProgress {
 
 class BadgeRules {
   static const List<BadgeDefinition> allBadges = [
+    BadgeDefinition(
+      id: 'new_user',
+      name: 'New User',
+      description: 'Welcome to Get Fit!',
+      type: MilestoneType.newUser,
+      threshold: 1,
+    ),
     BadgeDefinition(
       id: 'first_workout',
       name: 'First Workout',
@@ -82,6 +91,17 @@ class BadgeRules {
     ),
   ];
 
+  static List<BadgeDefinition> newlyEarned({
+    required Map<MilestoneType, int> before,
+    required Map<MilestoneType, int> after,
+  }) {
+    return allBadges
+        .where((b) =>
+            (before[b.type] ?? 0) < b.threshold &&
+            (after[b.type] ?? 0) >= b.threshold)
+        .toList();
+  }
+
   static Future<List<BadgeProgress>> getBadgeProgress(String uid) async {
     final snapshot = await ExpRules.userDoc(uid).get();
     final data = snapshot.data() ?? {};
@@ -90,9 +110,12 @@ class BadgeRules {
     final streak = (data['streakDays'] as num?)?.toInt() ?? 0;
     final level =
         ExpRules.levelForExp((data['totalExp'] as num?)?.toInt() ?? 0);
+    final isNewUser = data['welcomeBonusAwarded'] == true ? 1 : 0;
+    final joinedAt = (data['joinedAt'] as Timestamp?)?.toDate();
 
     return allBadges.map((b) {
       final progress = switch (b.type) {
+        MilestoneType.newUser => isNewUser,
         MilestoneType.workoutsCompleted => workouts,
         MilestoneType.streakDays => streak,
         MilestoneType.levelReached => level,
@@ -101,6 +124,7 @@ class BadgeRules {
         badgeId: b.id,
         currentProgress: progress,
         isAchieved: progress >= b.threshold,
+        achievedAt: b.type == MilestoneType.newUser ? joinedAt : null,
       );
     }).toList();
   }
