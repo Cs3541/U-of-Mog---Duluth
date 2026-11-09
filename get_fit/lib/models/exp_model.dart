@@ -1,5 +1,7 @@
 import 'dart:math';
-import 'package:firebase_database/firebase_database.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'badge_model.dart';
+import 'feed_model.dart';
 
 class ExpAwardResult {
   final int expGained;
@@ -37,6 +39,10 @@ class ExpRules {
   static const int expPerLevel = 100;
   static const int streakBonusPerDay = 5;
   static const int maxStreakBonus = 150;
+  static const int welcomeBonus = 5;
+
+  static DocumentReference<Map<String, dynamic>> userDoc(String uid) =>
+      FirebaseFirestore.instance.collection('users').doc(uid);
 
   static int expForActivity({
     required int durationMinutes,
@@ -52,30 +58,152 @@ class ExpRules {
   static String _dateKey(DateTime d) => d.toString().substring(0, 10);
 
   static Future<void> addActivityExp(String uid, int durationMinutes) async {
-    final ref = FirebaseDatabase.instance.ref('users/$uid');
-    final snapshot = await ref.get();
-    final data = (snapshot.value as Map?) ?? {};
-    final currentExp = (data['totalExp'] as num?)?.toInt() ?? 0;
-    final lastDate = data['lastStreakDate'] as String?;
-    final today = _dateKey(DateTime.now());
-    final yesterday =
-        _dateKey(DateTime.now().subtract(const Duration(days: 1)));
-    int streak = (data['streakDays'] as num?)?.toInt() ?? 0;
-    int bonusDays = 0;
-    if (lastDate != today) {
-      streak = (lastDate == yesterday) ? streak + 1 : 1;
-      bonusDays = streak;
-    }
+    final ref = userDoc(uid);
+    final feed = FeedRules.feedFor(uid);
 
-    final gained = expForActivity(
-      durationMinutes: durationMinutes,
-      streakDays: bonusDays,
-    );
+    await FirebaseFirestore.instance.runTransaction((tx) async {
+      final snapshot = await tx.get(ref);
+      final data = snapshot.data() ?? {};
 
-    await ref.update({
-      'totalExp': currentExp + gained,
-      'streakDays': streak,
-      'lastStreakDate': today,
+      final currentExp = (data['totalExp'] as num?)?.toInt() ?? 0;
+      final lastDate = data['lastStreakDate'] as String?;
+      final today = _dateKey(DateTime.now());
+      final yesterday =
+          _dateKey(DateTime.now().subtract(const Duration(days: 1)));
+
+      final previousStreak = (data['streakDays'] as num?)?.toInt() ?? 0;
+      int streak = previousStreak;
+      int bonusDays = 0;
+      if (lastDate != today) {
+        streak = (lastDate == yesterday) ? streak + 1 : 1;
+        bonusDays = streak;
+      }
+
+      final gained = expForActivity(
+        durationMinutes: durationMinutes,
+        streakDays: bonusDays,
+      );
+      final newTotal = currentExp + gained;
+
+      tx.set(
+        ref,
+        {
+          'totalExp': newTotal,
+          'streakDays': streak,
+          'lastStreakDate': today,
+        },
+        SetOptions(merge: true),
+      );
+
+      if (gained > 0) {
+        final streakBonus =
+            min(streakBonusPerDay * bonusDays, maxStreakBonus);
+        tx.set(
+          feed.doc(),
+          FeedRules.entry(
+            type: FeedType.exp,
+            title: '+$gained EXP',
+            subtitle: streakBonus > 0
+                ? '$durationMinutes min activity · includes +$streakBonus streak bonus'
+                : '$durationMinutes min activity',
+          ),
+        );
+      }
+
+      final levelBefore = levelForExp(currentExp);
+      final levelAfter = levelForExp(newTotal);
+      if (levelAfter > levelBefore) {
+        tx.set(
+          feed.doc(),
+          FeedRules.entry(
+            type: FeedType.levelUp,
+            title: 'Level $levelAfter reached!',
+            subtitle: 'You leveled up from level $levelBefore.',
+          ),
+        );
+      }
+
+      final workouts = (data['workoutsCompleted'] as num?)?.toInt() ?? 0;
+      final earned = BadgeRules.newlyEarned(
+        before: {
+          MilestoneType.workoutsCompleted: workouts,
+          MilestoneType.streakDays: previousStreak,
+          MilestoneType.levelReached: levelBefore,
+        },
+        after: {
+          MilestoneType.workoutsCompleted: workouts,
+          MilestoneType.streakDays: streak,
+          MilestoneType.levelReached: levelAfter,
+        },
+      );
+      for (final badge in earned) {
+        tx.set(
+          feed.doc(),
+          FeedRules.entry(
+            type: FeedType.badge,
+            title: 'Badge earned: ${badge.name}',
+            subtitle: badge.description,
+          ),
+        );
+      }
+    });
+  }
+
+  static const String _newUserCardId = 'new_user_badge';
+
+  static Future<void> awardWelcomeBonus(String uid, {DateTime? joinedAt}) async {
+    final ref = userDoc(uid);
+    final feed = FeedRules.feedFor(uid);
+
+    await FirebaseFirestore.instance.runTransaction((tx) async {
+      final snapshot = await tx.get(ref);
+      final data = snapshot.data() ?? {};
+
+      final alreadyAwarded = data['welcomeBonusAwarded'] == true;
+      final cardCreated = data['newUserCardCreated'] == true;
+      if (alreadyAwarded && cardCreated) return;
+
+      final updates = <String, dynamic>{};
+
+      if (!alreadyAwarded) {
+        final currentExp = (data['totalExp'] as num?)?.toInt() ?? 0;
+        updates['totalExp'] = currentExp + welcomeBonus;
+        updates['welcomeBonusAwarded'] = true;
+        updates['joinedAt'] = joinedAt != null
+            ? Timestamp.fromDate(joinedAt)
+            : FieldValue.serverTimestamp();
+
+        tx.set(
+          feed.doc(),
+          FeedRules.entry(
+            type: FeedType.exp,
+            title: '+$welcomeBonus EXP',
+            subtitle: 'Welcome bonus',
+          ),
+        );
+      }
+
+      if (!cardCreated) {
+        final storedJoin = data['joinedAt'];
+        final badgeTime =
+            storedJoin is Timestamp ? storedJoin.toDate() : joinedAt;
+        final badge = BadgeRules.allBadges
+            .firstWhere((b) => b.type == MilestoneType.newUser);
+
+        tx.set(
+          feed.doc(_newUserCardId),
+          FeedRules.entry(
+            type: FeedType.badge,
+            title: 'Badge earned: ${badge.name}',
+            subtitle: badge.description,
+            occurredAt: badgeTime,
+            timeUnknown: alreadyAwarded && badgeTime == null,
+          ),
+        );
+        updates['newUserCardCreated'] = true;
+      }
+
+      tx.set(ref, updates, SetOptions(merge: true));
     });
   }
 
@@ -101,13 +229,14 @@ class ExpRules {
   }
 
   static Stream<ExpStatus> watchExp(String uid) {
-    return FirebaseDatabase.instance.ref('users/$uid').onValue.map((event) {
-      final data = (event.snapshot.value as Map?) ?? {};
+    return userDoc(uid).snapshots().map((snapshot) {
+      final data = snapshot.data() ?? {};
       final total = (data['totalExp'] as num?)?.toInt() ?? 0;
       int streak = (data['streakDays'] as num?)?.toInt() ?? 0;
       final lastDate = data['lastStreakDate'] as String?;
       final today = _dateKey(DateTime.now());
-      final yesterday = _dateKey(DateTime.now().subtract(const Duration(days: 1)));
+      final yesterday =
+          _dateKey(DateTime.now().subtract(const Duration(days: 1)));
       if (lastDate != today && lastDate != yesterday) streak = 0;
 
       return statusFor(total, streak);
