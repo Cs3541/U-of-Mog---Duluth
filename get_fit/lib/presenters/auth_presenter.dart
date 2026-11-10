@@ -7,8 +7,8 @@ class AuthPresenter {
     return _model.login(email, password);
   }
 
-  Future<String?> signUp(String email, String password) {
-    return _model.signUp(email, password);
+  Future<String?> signUp(String email, String password, String displayName) {
+    return _model.signUp(email, password, displayName);
   }
 
   Future<void> logout() {

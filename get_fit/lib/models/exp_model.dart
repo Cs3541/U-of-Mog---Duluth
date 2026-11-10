@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'badge_model.dart';
 import 'feed_model.dart';
+import 'profile_model.dart';
 
 class ExpAwardResult {
   final int expGained;
@@ -57,6 +58,22 @@ class ExpRules {
 
   static String _dateKey(DateTime d) => d.toString().substring(0, 10);
 
+  static int currentStreak(Map<String, dynamic> data) {
+    final streak = (data['streakDays'] as num?)?.toInt() ?? 0;
+    final lastDate = data['lastStreakDate'] as String?;
+    final today = _dateKey(DateTime.now());
+    final yesterday =
+        _dateKey(DateTime.now().subtract(const Duration(days: 1)));
+    if (lastDate != today && lastDate != yesterday) return 0;
+    return streak;
+  }
+
+  static int bestStreak(Map<String, dynamic> data) {
+    final best = (data['bestStreak'] as num?)?.toInt() ?? 0;
+    final stored = (data['streakDays'] as num?)?.toInt() ?? 0;
+    return max(best, stored);
+  }
+
   static Future<void> addActivityExp(String uid, int durationMinutes) async {
     final ref = userDoc(uid);
     final feed = FeedRules.feedFor(uid);
@@ -79,6 +96,9 @@ class ExpRules {
         bonusDays = streak;
       }
 
+      final previousBest = bestStreak(data);
+      final newBest = max(previousBest, streak);
+
       final gained = expForActivity(
         durationMinutes: durationMinutes,
         streakDays: bonusDays,
@@ -90,8 +110,14 @@ class ExpRules {
         {
           'totalExp': newTotal,
           'streakDays': streak,
+          'bestStreak': newBest,
           'lastStreakDate': today,
         },
+        SetOptions(merge: true),
+      );
+      tx.set(
+        ProfileRules.profileDoc(uid),
+        {'totalExp': newTotal},
         SetOptions(merge: true),
       );
 
@@ -127,12 +153,12 @@ class ExpRules {
       final earned = BadgeRules.newlyEarned(
         before: {
           MilestoneType.workoutsCompleted: workouts,
-          MilestoneType.streakDays: previousStreak,
+          MilestoneType.streakDays: previousBest,
           MilestoneType.levelReached: levelBefore,
         },
         after: {
           MilestoneType.workoutsCompleted: workouts,
-          MilestoneType.streakDays: streak,
+          MilestoneType.streakDays: newBest,
           MilestoneType.levelReached: levelAfter,
         },
       );
@@ -168,6 +194,11 @@ class ExpRules {
       if (!alreadyAwarded) {
         final currentExp = (data['totalExp'] as num?)?.toInt() ?? 0;
         updates['totalExp'] = currentExp + welcomeBonus;
+        tx.set(
+          ProfileRules.profileDoc(uid),
+          {'totalExp': currentExp + welcomeBonus},
+          SetOptions(merge: true),
+        );
         updates['welcomeBonusAwarded'] = true;
         updates['joinedAt'] = joinedAt != null
             ? Timestamp.fromDate(joinedAt)
@@ -232,14 +263,7 @@ class ExpRules {
     return userDoc(uid).snapshots().map((snapshot) {
       final data = snapshot.data() ?? {};
       final total = (data['totalExp'] as num?)?.toInt() ?? 0;
-      int streak = (data['streakDays'] as num?)?.toInt() ?? 0;
-      final lastDate = data['lastStreakDate'] as String?;
-      final today = _dateKey(DateTime.now());
-      final yesterday =
-          _dateKey(DateTime.now().subtract(const Duration(days: 1)));
-      if (lastDate != today && lastDate != yesterday) streak = 0;
-
-      return statusFor(total, streak);
+      return statusFor(total, currentStreak(data));
     });
   }
 }

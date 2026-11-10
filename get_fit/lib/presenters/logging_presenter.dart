@@ -1,44 +1,82 @@
 import '../models/exercise_model.dart';
 
-class LoggingPresenter {
-  LoggingPresenter({LoggingModel? model}) : _model = model ?? LoggingModel();
-  final LoggingModel _model;
-  final List<ExerciseLog> exercises = [];
+class WorkoutSet {
+  String reps = '';
+  String weight = '';
+  bool completed = false;
 
-  String? addExercise(String name, String sets, String reps, String weight) {
-    if (exercises.length >= 10) {
-      return 'A workout can contain up to 10 exercises.';
-    }
-    final setCount = int.tryParse(sets.trim());
-    final repCount = int.tryParse(reps.trim());
+  String? get error {
+    final count = int.tryParse(reps.trim());
     final load = double.tryParse(weight.trim());
-    if (!LoggingModel.commonExercises.contains(name) ||
-        setCount == null ||
-        setCount < 1 ||
-        setCount > 100 ||
-        repCount == null ||
-        repCount < 1 ||
-        repCount > 1000 ||
+    if (count == null ||
+        count < 1 ||
+        count > 1000 ||
         load == null ||
         !load.isFinite ||
         load < 0 ||
         load > 10000) {
-      return 'Use 1–100 sets, 1–1000 reps, and a weight from 0–10000 lb.';
+      return 'Enter 1–1000 reps and 0–10000 lb. Use 0 for bodyweight.';
     }
-    exercises.add(
-      ExerciseLog(
-        exerciseName: name,
-        sets: setCount,
-        reps: repCount,
-        weight: load,
-      ),
-    );
     return null;
   }
 
-  Future<String?> save(String name) async {
-    final error = await _model.saveWorkout(name, List.of(exercises));
-    if (error == null) exercises.clear();
-    return error;
+  ExerciseLog toLog(String name) => ExerciseLog(
+    exerciseName: name,
+    sets: 1,
+    reps: int.parse(reps.trim()),
+    weight: double.parse(weight.trim()),
+  );
+}
+
+class WorkoutExercise {
+  WorkoutExercise(this.name);
+  final String name;
+  final sets = [WorkoutSet()];
+  List<ExerciseLog> previous = [];
+  bool loadingPrevious = true;
+  String? historyError;
+}
+
+class LoggingPresenter {
+  LoggingPresenter({LoggingModel? model}) : _model = model ?? LoggingModel();
+  final LoggingModel _model;
+  final exercises = <WorkoutExercise>[];
+  final startedAt = DateTime.now();
+  int get setCount =>
+      exercises.fold(0, (count, exercise) => count + exercise.sets.length);
+  bool get canAddSet => setCount < LoggingModel.maxWorkoutSets;
+
+  Future<void> loadPrevious(WorkoutExercise exercise) async {
+    try {
+      exercise.previous = await _model.previousSets(exercise.name);
+    } catch (_) {
+      exercise.historyError =
+          'Previous numbers unavailable. You can still log sets.';
+    } finally {
+      exercise.loadingPrevious = false;
+    }
+  }
+
+  Future<String?> save() async {
+    if (setCount == 0) return 'Add at least one exercise and complete a set.';
+    if (setCount > LoggingModel.maxWorkoutSets) {
+      return 'Use up to ${LoggingModel.maxWorkoutSets} sets per workout.';
+    }
+    for (final exercise in exercises) {
+      for (final set in exercise.sets) {
+        if (set.error != null) return '${exercise.name}: ${set.error}';
+        if (!set.completed) {
+          return 'Check off each finished set, or remove unfinished sets.';
+        }
+      }
+    }
+    final date = startedAt
+        .toIso8601String()
+        .substring(0, 16)
+        .replaceFirst('T', ' ');
+    return _model.saveWorkout('Workout $date', [
+      for (final exercise in exercises)
+        for (final set in exercise.sets) set.toLog(exercise.name),
+    ]);
   }
 }
