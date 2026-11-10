@@ -65,7 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
           padding: const EdgeInsets.all(16),
           children: [
             const Text(
-              'Welcome to the Get Fit!',
+              'Welcome to Get Fit!',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),

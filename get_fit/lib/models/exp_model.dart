@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'badge_model.dart';
 import 'feed_model.dart';
+import 'profile_model.dart';
 
 class ExpAwardResult {
   final int expGained;
@@ -94,6 +95,11 @@ class ExpRules {
         },
         SetOptions(merge: true),
       );
+      tx.set(
+        ProfileRules.profileDoc(uid),
+        {'totalExp': newTotal},
+        SetOptions(merge: true),
+      );
 
       if (gained > 0) {
         final streakBonus =
@@ -168,6 +174,11 @@ class ExpRules {
       if (!alreadyAwarded) {
         final currentExp = (data['totalExp'] as num?)?.toInt() ?? 0;
         updates['totalExp'] = currentExp + welcomeBonus;
+        tx.set(
+          ProfileRules.profileDoc(uid),
+          {'totalExp': currentExp + welcomeBonus},
+          SetOptions(merge: true),
+        );
         updates['welcomeBonusAwarded'] = true;
         updates['joinedAt'] = joinedAt != null
             ? Timestamp.fromDate(joinedAt)
