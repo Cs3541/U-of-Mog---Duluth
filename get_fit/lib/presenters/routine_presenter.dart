@@ -12,8 +12,13 @@ class RoutinePresenter {
   }
 
   Future<void> addRoutine(Routine routine) async {
-    await routine.addRoutine(routine);
-    _routines.add(routine);
+    final id = await routine.addRoutine(routine);
+    _routines.add(Routine(
+      id: id,
+      routineName: routine.routineName,
+      description: routine.description,
+      daysWorked: routine.daysWorked,
+    ));
   }
 
   Future<void> deleteRoutine(String routineId) async {
@@ -21,5 +26,4 @@ class RoutinePresenter {
     await routine.deleteRoutine(routineId);
     _routines.removeWhere((routine) => routine.id == routineId);
   }
-  
 }

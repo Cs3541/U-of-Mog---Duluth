@@ -1,7 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_database/firebase_database.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-class Routine{
+class Routine {
   final String? id;
   final String? routineName;
   final String? description;
@@ -14,58 +14,44 @@ class Routine{
     this.daysWorked,
   });
 
-  static Future<List<Routine>> loadRoutines() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
+  static CollectionReference<Map<String, dynamic>> get _col =>
+      FirebaseFirestore.instance.collection('routines');
+
+  static void _requireUser() {
+    if (FirebaseAuth.instance.currentUser == null) {
       throw Exception('User not authenticated');
     }
-
-    final databaseRef = FirebaseDatabase.instance.ref();
-    final routinesSnapshot = await databaseRef.child('routines').get();
-
-    if (!routinesSnapshot.exists) {
-      return [];
-    }
-
-    final routinesData = routinesSnapshot.value as Map<dynamic, dynamic>;
-    final List<Routine> routines = [];
-
-    routinesData.forEach((key, value) {
-      final routineData = value as Map<dynamic, dynamic>;
-      final routine = Routine(
-        id: key,
-        routineName: routineData['routineName'] as String?,
-        description: routineData['description'] as String?,
-        daysWorked: routineData['daysWorked'] as String?,
-      );
-      routines.add(routine);
-    });
-
-    return routines;
   }
 
-  Future<void> addRoutine(Routine routine) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      throw Exception('User not authenticated');
-    }
+  static Future<List<Routine>> loadRoutines() async {
+    _requireUser();
 
-    final databaseRef = FirebaseDatabase.instance.ref();
-    final newRoutineRef = databaseRef.child('routines').push();
-    await newRoutineRef.set({
+    final snapshot = await _col.get();
+
+    return snapshot.docs.map((doc) {
+      final data = doc.data();
+      return Routine(
+        id: doc.id,
+        routineName: data['routineName'] as String?,
+        description: data['description'] as String?,
+        daysWorked: data['daysWorked'] as String?,
+      );
+    }).toList();
+  }
+
+  Future<String> addRoutine(Routine routine) async {
+    _requireUser();
+
+    final docRef = await _col.add({
       'routineName': routine.routineName,
       'description': routine.description,
       'daysWorked': routine.daysWorked,
     });
+    return docRef.id;
   }
 
   Future<void> deleteRoutine(String routineId) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      throw Exception('User not authenticated');
-    }
-
-    final databaseRef = FirebaseDatabase.instance.ref();
-    await databaseRef.child('routines').child(routineId).remove();
+    _requireUser();
+    await _col.doc(routineId).delete();
   }
 }

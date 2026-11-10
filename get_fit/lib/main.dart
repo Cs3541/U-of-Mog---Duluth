@@ -3,10 +3,33 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'views/main_navigation.dart';
 import 'views/login_screen.dart';
+import 'models/exp_model.dart';
+import 'models/profile_model.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
+
+  FirebaseAuth.instance.authStateChanges().listen((user) async {
+    if (user == null) return;
+    try {
+      await ExpRules.awardWelcomeBonus(
+        user.uid,
+        joinedAt: user.metadata.creationTime,
+      );
+    } catch (e) {
+      debugPrint('Could not award welcome bonus: $e');
+    }
+    try {
+      await ProfileRules.ensureProfile(
+        user.uid,
+        displayName: user.displayName,
+      );
+    } catch (e) {
+      debugPrint('Could not set up profile: $e');
+    }
+  });
+
   runApp(const GetFitApp());
 }
 
@@ -46,11 +69,9 @@ class SplashScreen extends StatelessWidget {
             ),
           );
         }
-        // If user is signed in
         if (snapshot.hasData) {
           return const MainNavigation();
         }
-        // If user is not signed in
         return const LoginScreen();
       },
     );

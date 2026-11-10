@@ -11,6 +11,7 @@ class SignupScreen extends StatefulWidget {
 }
 
 class _SignupScreenState extends State<SignupScreen> {
+  final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
@@ -19,10 +20,16 @@ class _SignupScreenState extends State<SignupScreen> {
   String? _errorMessage;
 
   void _handleSignup() async {
+    final name = _nameController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
     final confirmPassword = _confirmPasswordController.text.trim();
     final emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+');
+
+    if (name.isEmpty || name.length > 30) {
+      setState(() => _errorMessage = 'Enter a display name up to 30 characters');
+      return;
+    }
 
     if (!emailRegex.hasMatch(email)) {
       setState(() => _errorMessage = 'Please enter a valid email address');
@@ -33,14 +40,10 @@ class _SignupScreenState extends State<SignupScreen> {
       setState(() => _errorMessage = 'Passwords do not match');
       return;
     }
-    final error = await _presenter.signUp(
-      _emailController.text.trim(),
-      password,
-    );
+    final error = await _presenter.signUp(email, password, name);
     if(error != null) {
       setState(() => _errorMessage = error);
     } else {
-      // Navigate to the main navigation screen on successful signup
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => const MainNavigation()),
@@ -61,6 +64,11 @@ class _SignupScreenState extends State<SignupScreen> {
           children: [
             if (_errorMessage != null)
               Text(_errorMessage!, style: const TextStyle(color: Colors.red),),
+            TextField(
+              controller: _nameController,
+              maxLength: 30,
+              decoration: const InputDecoration(labelText: 'Display Name'),
+            ),
             TextField(
               controller: _emailController,
               decoration: const InputDecoration(labelText: 'Email'),
