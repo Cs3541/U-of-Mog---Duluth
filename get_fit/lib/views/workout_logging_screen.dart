@@ -3,115 +3,21 @@ import 'package:flutter/material.dart';
 import '../models/exercise_model.dart';
 import '../presenters/logging_presenter.dart';
 
-class WorkoutsScreen extends StatefulWidget {
-  const WorkoutsScreen({super.key});
-
-  @override
-  State<WorkoutsScreen> createState() => _WorkoutsScreenState();
-}
-
-class _WorkoutsScreenState extends State<WorkoutsScreen> {
-  LoggingPresenter? _workout;
-  Future<String?>? _save;
-  bool _opening = false;
-
-  Future<void> _openWorkout({required bool startNew}) async {
-    if (_opening) return;
-    setState(() {
-      _opening = true;
-      if (startNew) {
-        _workout = null;
-        _save = null;
-      }
-      _workout ??= LoggingPresenter();
-    });
-    final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => WorkoutLoggingScreen(
-          presenter: _workout,
-          onSaveStarted: (save) {
-            if (mounted) {
-              setState(() {
-                _save = save;
-              });
-            }
-          },
-        ),
-      ),
-    );
-    if (!mounted) return;
-    setState(() {
-      _opening = false;
-      // A null result means the user left while saving; keep tracking that save.
-      if (result != null) {
-        _workout = null;
-        _save = null;
-      }
-    });
-    if (result == true) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Workout saved.')));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => FutureBuilder<String?>(
-    future: _save,
-    builder: (context, snapshot) {
-      final saving =
-          _save != null && snapshot.connectionState != ConnectionState.done;
-      final saved =
-          _save != null &&
-          !saving &&
-          !snapshot.hasError &&
-          snapshot.data == null;
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_save != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Text(
-                    saving
-                        ? 'Saving workout. You can use other tabs while it finishes.'
-                        : saved
-                        ? 'Workout saved.'
-                        : 'Could not save. Resume your workout to try again.',
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                ),
-                icon: const Icon(Icons.add),
-                label: Text(
-                  saving
-                      ? 'Saving…'
-                      : _workout == null || saved
-                      ? 'Start workout'
-                      : 'Resume workout',
-                ),
-                onPressed: saving || _opening
-                    ? null
-                    : () => _openWorkout(startNew: saved),
-              ),
-            ],
-          ),
-        ),
-      );
-    },
-  );
-}
-
 class WorkoutLoggingScreen extends StatefulWidget {
-  const WorkoutLoggingScreen({super.key, this.presenter, this.onSaveStarted});
+  const WorkoutLoggingScreen({
+    super.key,
+    this.presenter,
+    this.onSaveStarted,
+    this.workoutName,
+    this.muscleGroup,
+    this.muscle,
+  });
+
   final LoggingPresenter? presenter;
   final ValueChanged<Future<String?>>? onSaveStarted;
+  final String? workoutName;
+  final String? muscleGroup;
+  final String? muscle;
 
   @override
   State<WorkoutLoggingScreen> createState() => _WorkoutLoggingScreenState();
@@ -185,7 +91,7 @@ class _WorkoutLoggingScreenState extends State<WorkoutLoggingScreen> {
       _error = null;
     });
     try {
-      final save = _presenter.save();
+      final save = _presenter.save(workoutName: widget.workoutName);
       widget.onSaveStarted?.call(save);
       final error = await save;
       if (!mounted || _canLeave) return;
@@ -216,7 +122,11 @@ class _WorkoutLoggingScreenState extends State<WorkoutLoggingScreen> {
     },
     child: Scaffold(
       appBar: AppBar(
-        title: const Text('Log workout'),
+        title: Text(
+          widget.workoutName == null
+              ? 'Log workout'
+              : 'Log ${widget.workoutName}',
+        ),
         backgroundColor: Colors.green,
         foregroundColor: Colors.white,
       ),
@@ -225,6 +135,19 @@ class _WorkoutLoggingScreenState extends State<WorkoutLoggingScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            if (widget.muscleGroup != null || widget.muscle != null)
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.fitness_center),
+                  title: Text(widget.workoutName ?? 'Selected workout'),
+                  subtitle: Text(
+                    [
+                      widget.muscleGroup,
+                      widget.muscle,
+                    ].whereType<String>().join(' • '),
+                  ),
+                ),
+              ),
             if (_saving)
               const Padding(
                 padding: EdgeInsets.only(bottom: 16),

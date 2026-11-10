@@ -4,6 +4,7 @@ class WorkoutPresenter {
   final List<Workout> _workouts = [];
 
   List<Workout> get workouts => List.unmodifiable(_workouts);
+  Map<String, List<String>> get musclesByGroup => Workout.musclesByGroup;
 
   Future<void> loadWorkouts() async {
     final loadedWorkouts = await Workout.loadWorkouts();
@@ -13,11 +14,20 @@ class WorkoutPresenter {
 
   Future<void> addWorkout({
     required String workoutName,
-    String? muscleGroup,
-    String? muscle,
+    required String muscleGroup,
+    required String muscle,
   }) async {
+    final trimmedName = workoutName.trim();
+    if (trimmedName.isEmpty || trimmedName.length > 100) {
+      throw ArgumentError('Workout name must be between 1 and 100 characters.');
+    }
+    if (!Workout.musclesByGroup.containsKey(muscleGroup) ||
+        !Workout.musclesByGroup[muscleGroup]!.contains(muscle)) {
+      throw ArgumentError('Select a valid muscle group and muscle.');
+    }
+
     final workout = Workout(
-      workoutName: workoutName,
+      workoutName: trimmedName,
       muscleGroup: muscleGroup,
       muscle: muscle,
     );
