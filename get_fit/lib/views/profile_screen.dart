@@ -1,10 +1,13 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../models/exp_model.dart';
+import '../models/friend_model.dart';
 import '../models/profile_model.dart';
 import '../presenters/auth_presenter.dart';
 import '../presenters/exp_presenter.dart';
+import '../presenters/friend_presenter.dart';
 import '../presenters/profile_presenter.dart';
+import 'friend_screen.dart';
 import 'login_screen.dart';
 
 class ProfileAvatar extends StatelessWidget {
@@ -38,6 +41,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final AuthPresenter _presenter = AuthPresenter();
   final ExpPresenter _expPresenter = ExpPresenter();
   final ProfilePresenter _profilePresenter = ProfilePresenter();
+  final FriendsPresenter _friendsPresenter = FriendsPresenter();
   final TextEditingController _nameController = TextEditingController();
 
   late final String _email = _presenter.getCurrentUserEmail() ?? 'Unknown User';
@@ -46,6 +50,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _uid.isEmpty ? null : _profilePresenter.watchProfile(_uid);
   late final Stream<ExpStatus>? _expStream =
       _uid.isEmpty ? null : _expPresenter.watchExp(_uid);
+  late final Stream<List<FriendRequest>> _incomingStream =
+      _friendsPresenter.watchIncoming();
 
   bool _nameLoaded = false;
   bool _busy = false;
@@ -118,6 +124,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   leading: const Icon(Icons.star, color: Colors.amber),
                   title: Text('Level ${s.level}'),
                   subtitle: Text('${s.totalExp} EXP'),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+          StreamBuilder<List<FriendRequest>>(
+            stream: _incomingStream,
+            builder: (context, snapshot) {
+              final count = snapshot.data?.length ?? 0;
+              return Card(
+                elevation: 4,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: ListTile(
+                  leading: Badge(
+                    isLabelVisible: count > 0,
+                    label: Text('$count'),
+                    child: const Icon(Icons.people),
+                  ),
+                  title: const Text('Friends'),
+                  subtitle: Text(count > 0
+                      ? '$count pending request${count == 1 ? '' : 's'}'
+                      : 'Find friends and manage requests'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const FriendsScreen()),
+                  ),
                 ),
               );
             },
