@@ -107,7 +107,8 @@ class BadgeRules {
     final data = snapshot.data() ?? {};
 
     final workouts = (data['workoutsCompleted'] as num?)?.toInt() ?? 0;
-    final streak = (data['streakDays'] as num?)?.toInt() ?? 0;
+    final currentStreak = ExpRules.currentStreak(data);
+    final bestStreak = ExpRules.bestStreak(data);
     final level =
         ExpRules.levelForExp((data['totalExp'] as num?)?.toInt() ?? 0);
     final isNewUser = data['welcomeBonusAwarded'] == true ? 1 : 0;
@@ -117,7 +118,8 @@ class BadgeRules {
       final progress = switch (b.type) {
         MilestoneType.newUser => isNewUser,
         MilestoneType.workoutsCompleted => workouts,
-        MilestoneType.streakDays => streak,
+        MilestoneType.streakDays =>
+          bestStreak >= b.threshold ? bestStreak : currentStreak,
         MilestoneType.levelReached => level,
       };
       return BadgeProgress(
