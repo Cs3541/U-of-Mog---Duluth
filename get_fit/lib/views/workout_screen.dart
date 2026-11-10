@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/workout_model.dart';
 import '../presenters/workout_presenter.dart';
+import 'routine_screen.dart';
 import 'workout_logging_screen.dart';
 
 class WorkoutsScreen extends StatefulWidget {
@@ -146,85 +147,107 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        children: [
+          const TabBar(
+            labelColor: Colors.green,
+            unselectedLabelColor: Colors.grey,
+            indicatorColor: Colors.green,
+            tabs: [
+              Tab(text: 'Workouts'),
+              Tab(text: 'Routines'),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [_buildWorkoutsContent(), const RoutineScreen()],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWorkoutsContent() {
     final workouts = _presenter.workouts;
-    return Scaffold(
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _loadError != null
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('Could not load workouts: $_loadError'),
-                    const SizedBox(height: 12),
-                    OutlinedButton(
-                      onPressed: () {
-                        setState(() {
-                          _isLoading = true;
-                          _loadError = null;
-                        });
-                        _loadWorkouts();
-                      },
-                      child: const Text('Retry'),
+    return _isLoading
+        ? const Center(child: CircularProgressIndicator())
+        : _loadError != null
+        ? Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Could not load workouts: $_loadError'),
+                  const SizedBox(height: 12),
+                  OutlinedButton(
+                    onPressed: () {
+                      setState(() {
+                        _isLoading = true;
+                        _loadError = null;
+                      });
+                      _loadWorkouts();
+                    },
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+          )
+        : ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Text(
+                'Choose a workout',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Select a workout to log, or create a new one.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 16),
+              if (workouts.isEmpty)
+                const Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Text(
+                      'You have no saved workouts yet. Add one to get started.',
+                      textAlign: TextAlign.center,
                     ),
-                  ],
+                  ),
+                )
+              else
+                ...workouts.map(_buildWorkoutTile),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _isOpening ? null : _addWorkout,
+                icon: const Icon(Icons.add),
+                label: const Text('Add workout'),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: _selectedWorkout == null || _isOpening
+                    ? null
+                    : _logSelectedWorkout,
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                ),
+                icon: const Icon(Icons.play_arrow),
+                label: Text(
+                  _isOpening
+                      ? 'Opening…'
+                      : _selectedWorkout == null
+                      ? 'Select a workout to log'
+                      : 'Log ${_selectedWorkout!.workoutName ?? 'workout'}',
                 ),
               ),
-            )
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                Text(
-                  'Choose a workout',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Select a workout to log, or create a new one.',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 16),
-                if (workouts.isEmpty)
-                  const Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Text(
-                        'You have no saved workouts yet. Add one to get started.',
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  )
-                else
-                  ...workouts.map(_buildWorkoutTile),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: _isOpening ? null : _addWorkout,
-                  icon: const Icon(Icons.add),
-                  label: const Text('Add workout'),
-                ),
-                const SizedBox(height: 12),
-                FilledButton.icon(
-                  onPressed: _selectedWorkout == null || _isOpening
-                      ? null
-                      : _logSelectedWorkout,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                  ),
-                  icon: const Icon(Icons.play_arrow),
-                  label: Text(
-                    _isOpening
-                        ? 'Opening…'
-                        : _selectedWorkout == null
-                        ? 'Select a workout to log'
-                        : 'Log ${_selectedWorkout!.workoutName ?? 'workout'}',
-                  ),
-                ),
-              ],
-            ),
-    );
+            ],
+          );
   }
 
   Widget _buildWorkoutTile(Workout workout) {
