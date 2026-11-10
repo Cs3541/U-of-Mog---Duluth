@@ -5,6 +5,7 @@ import '../home_screen.dart';
 import 'profile_screen.dart';
 import 'badges_screen.dart';
 import 'events_screen.dart';
+import 'workout_screen.dart';
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
@@ -18,7 +19,7 @@ class _MainNavigationState extends State<MainNavigation> {
 
   final List<Widget> _screens = [
     const HomeScreen(),
-    const Center(child: Text('Workouts')),
+    const WorkoutScreen(),
     const ProgressScreen(),
     const EventsScreen(),
     const Center(child: Text('LeaderBoard')),
