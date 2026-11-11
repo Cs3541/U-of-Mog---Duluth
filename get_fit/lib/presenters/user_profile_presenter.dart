@@ -14,6 +14,16 @@ class Relationship {
   final FriendRequest? request;
 }
 
+class FriendsOnly<T> {
+  const FriendsOnly.visible(this.value) : hidden = false;
+  const FriendsOnly.hidden()
+      : value = null,
+        hidden = true;
+
+  final T? value;
+  final bool hidden;
+}
+
 class UserProfilePresenter {
   final AuthPresenter _auth = AuthPresenter();
   final ProfilePresenter _profiles = ProfilePresenter();
@@ -60,6 +70,52 @@ class UserProfilePresenter {
           await s.cancel();
         }
         subs.clear();
+      },
+    );
+    return controller.stream;
+  }
+
+  Stream<FriendsOnly<Map<String, DateTime?>>> watchBadges(String uid) =>
+      _friendsOnly(uid, () => ProfileRules.watchFriendBadges(uid));
+
+  Stream<FriendsOnly<DateTime?>> watchLastWorkout(String uid) =>
+      _friendsOnly(uid, () => ProfileRules.watchLastWorkout(uid));
+
+  Stream<FriendsOnly<T>> _friendsOnly<T>(
+    String uid,
+    Stream<T> Function() source,
+  ) {
+    StreamSubscription<Relationship>? relSub;
+    StreamSubscription<T>? dataSub;
+    late final StreamController<FriendsOnly<T>> controller;
+
+    void hide() {
+      dataSub?.cancel();
+      dataSub = null;
+      controller.add(FriendsOnly<T>.hidden());
+    }
+
+    controller = StreamController<FriendsOnly<T>>(
+      onListen: () {
+        relSub = watchRelationship(uid).listen(
+          (rel) {
+            final visible = rel.status == FriendStatus.friends ||
+                rel.status == FriendStatus.self;
+            if (!visible) {
+              hide();
+            } else if (dataSub == null) {
+              dataSub = source().listen(
+                (v) => controller.add(FriendsOnly<T>.visible(v)),
+                onError: (Object _) => hide(),
+              );
+            }
+          },
+          onError: controller.addError,
+        );
+      },
+      onCancel: () async {
+        await dataSub?.cancel();
+        await relSub?.cancel();
       },
     );
     return controller.stream;
