@@ -57,7 +57,7 @@ class LoggingPresenter {
     }
   }
 
-  Future<String?> save() async {
+  Future<String?> save({String? workoutName}) async {
     if (setCount == 0) return 'Add at least one exercise and complete a set.';
     if (setCount > LoggingModel.maxWorkoutSets) {
       return 'Use up to ${LoggingModel.maxWorkoutSets} sets per workout.';
@@ -74,7 +74,7 @@ class LoggingPresenter {
         .toIso8601String()
         .substring(0, 16)
         .replaceFirst('T', ' ');
-    return _model.saveWorkout('Workout $date', [
+    return _model.saveWorkout(workoutName ?? 'Workout $date', [
       for (final exercise in exercises)
         for (final set in exercise.sets) set.toLog(exercise.name),
     ]);

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:get_fit/views/progress_screen.dart';
+
 import '../home_screen.dart';
 import 'profile_screen.dart';
 import 'badges_screen.dart';
 import 'events_screen.dart';
-import 'workout_logging_screen.dart';
+import 'workout_screen.dart';
 import 'leaderboard_screen.dart';
 
 class MainNavigation extends StatefulWidget {
@@ -49,10 +50,7 @@ class _MainNavigationState extends State<MainNavigation> {
         selectedItemColor: Colors.green,
         unselectedItemColor: Colors.grey,
         items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'Home',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
           BottomNavigationBarItem(
             icon: Icon(Icons.fitness_center),
             label: 'Workouts',
@@ -61,10 +59,7 @@ class _MainNavigationState extends State<MainNavigation> {
             icon: Icon(Icons.bar_chart),
             label: 'Progress',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.event),
-            label: 'Events',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.event), label: 'Events'),
           BottomNavigationBarItem(
             icon: Icon(Icons.leaderboard),
             label: 'LeaderBoard',
@@ -73,10 +68,7 @@ class _MainNavigationState extends State<MainNavigation> {
             icon: Icon(Icons.emoji_events),
             label: 'Badges',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: 'Profile',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
       ),
     );
