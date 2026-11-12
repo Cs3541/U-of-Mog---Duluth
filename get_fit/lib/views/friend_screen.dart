@@ -4,6 +4,7 @@ import '../models/friend_model.dart';
 import '../presenters/friend_presenter.dart';
 import 'friend_alerts.dart';
 import 'profile_screen.dart';
+import 'user_profile_screen.dart';
 
 class FriendsScreen extends StatefulWidget {
   const FriendsScreen({super.key});
@@ -78,6 +79,15 @@ class _FriendsScreenState extends State<FriendsScreen> {
     }
   }
 
+  void _openProfile(String uid, String name) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => UserProfileScreen(uid: uid, initialName: name),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -130,6 +140,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
                 leading: ProfileAvatar(photo: user.photo),
                 title: Text(user.displayName),
                 trailing: _searchAction(user),
+                onTap: () => _openProfile(user.uid, user.displayName),
               ),
           if (_incoming.isNotEmpty) ...[
             _header('Requests'),
@@ -137,6 +148,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
               ListTile(
                 leading: const ProfileAvatar(),
                 title: Text(r.fromName),
+                onTap: () => _openProfile(r.from, r.fromName),
                 trailing: _busy.contains(r.from)
                     ? _spinner()
                     : Row(
@@ -164,6 +176,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
               ListTile(
                 leading: const ProfileAvatar(),
                 title: Text(r.toName),
+                onTap: () => _openProfile(r.to, r.toName),
                 subtitle: const Text('Pending'),
                 trailing: _busy.contains(r.to)
                     ? _spinner()
@@ -188,6 +201,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
               ListTile(
                 leading: ProfileAvatar(photo: f.photo),
                 title: Text(f.displayName),
+                onTap: () => _openProfile(f.uid, f.displayName),
                 trailing: _busy.contains(f.uid)
                     ? _spinner()
                     : TextButton(

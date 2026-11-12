@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/profile_model.dart';
 import '../presenters/leaderboard_presenter.dart';
 import 'profile_screen.dart';
+import 'user_profile_screen.dart';
 
 class LeaderboardScreen extends StatefulWidget {
   const LeaderboardScreen({super.key});
@@ -104,6 +105,15 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               ),
             ),
             trailing: _buildLevelBadge(profile.level),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => UserProfileScreen(
+                  uid: profile.uid,
+                  initialName: profile.displayName,
+                ),
+              ),
+            ),
           ),
         );
       },
