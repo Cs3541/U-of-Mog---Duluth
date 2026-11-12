@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import '../models/workout_model.dart';
 import '../presenters/workout_presenter.dart';
 import 'routine_screen.dart';
