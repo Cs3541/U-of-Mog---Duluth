@@ -1,6 +1,5 @@
 import 'package:draw_graph/models/feature.dart';
 import 'package:flutter/material.dart';
-import 'package:draw_graph/draw_graph.dart';
 
 import '../presenters/progress_presenter.dart';
 
@@ -17,6 +16,7 @@ class ProgressScreen extends StatefulWidget {
 
 class ProgressScreenState extends State<ProgressScreen> {
   final ProgressPresenter _presenter = ProgressPresenter();
+  late final Stream<ProgressChartData> _chart = _presenter.watchChart();
   _ProgressGraphType _graphType = _ProgressGraphType.area;
   Color _chartColor = Colors.blue;
   String _xAxisName = 'Weeks';
@@ -271,19 +271,45 @@ class ProgressScreenState extends State<ProgressScreen> {
                         ),
                       ),
                     ),
-                  ),
-                  Expanded(
-                    child: LineGraph(
-                      features: features,
-                      size: Size(MediaQuery.sizeOf(context).width - 80, 300),
-                      labelX: const ['1', '2', '3', '4', '5'],
-                      labelY: const ['0', '25', '50', '75', '100'],
-                      graphOpacity: _graphType == _ProgressGraphType.area
-                          ? 0.3
-                          : 0,
-                      showDescription: false,
+                    Expanded(
+                      child: LineGraph(
+                        features: [feature],
+                        size: Size(MediaQuery.sizeOf(context).width - 80, 300),
+                        labelX: chart.weekLabels,
+                        labelY: chart.volumeLabels,
+                        graphOpacity: _graphType == _ProgressGraphType.area
+                            ? 0.3
+                            : 0,
+                        showDescription: false,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Weeks',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              if (!chart.hasWorkouts)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text('No workout data for the last 5 weeks.'),
+                ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 14,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: feature.color,
+                      borderRadius: BorderRadius.circular(4),
                     ),
                   ),
+                  const SizedBox(width: 8),
+                  Text(feature.title, style: const TextStyle(fontSize: 13)),
                 ],
               ),
             ),
