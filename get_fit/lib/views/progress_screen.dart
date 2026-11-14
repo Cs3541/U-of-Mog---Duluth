@@ -1,4 +1,3 @@
-
 import 'package:draw_graph/models/feature.dart';
 import 'package:flutter/material.dart';
 import 'package:draw_graph/draw_graph.dart';
@@ -7,7 +6,7 @@ import '../presenters/progress_presenter.dart';
 
 enum _ProgressGraphType { line, area }
 
-enum _ProgressCustomization { type, color }
+enum _ProgressCustomization { type, color, axes, legendName }
 
 class ProgressScreen extends StatefulWidget {
   const ProgressScreen({super.key});
@@ -20,6 +19,9 @@ class ProgressScreenState extends State<ProgressScreen> {
   final ProgressPresenter _presenter = ProgressPresenter();
   _ProgressGraphType _graphType = _ProgressGraphType.area;
   Color _chartColor = Colors.blue;
+  String _xAxisName = 'Weeks';
+  String _yAxisName = 'Volume (lbs)';
+  String _legendName = 'Progress';
 
   Future<void> _customizeGraph() async {
     final customization = await showDialog<_ProgressCustomization>(
@@ -37,6 +39,15 @@ class ProgressScreenState extends State<ProgressScreen> {
               title: const Text('Change color'),
               onTap: () => Navigator.pop(context, _ProgressCustomization.color),
             ),
+            ListTile(
+              title: const Text('Change axis names'),
+              onTap: () => Navigator.pop(context, _ProgressCustomization.axes),
+            ),
+            ListTile(
+              title: const Text('Change legend name'),
+              onTap: () =>
+                  Navigator.pop(context, _ProgressCustomization.legendName),
+            ),
           ],
         ),
       ),
@@ -45,9 +56,113 @@ class ProgressScreenState extends State<ProgressScreen> {
     if (!mounted || customization == null) return;
     if (customization == _ProgressCustomization.type) {
       await _selectGraphType();
-    } else {
+    } else if (customization == _ProgressCustomization.color) {
       await _selectGraphColor();
+    } else if (customization == _ProgressCustomization.axes) {
+      await _selectAxisNames();
+    } else {
+      await _selectLegendName();
     }
+  }
+
+  Future<void> _selectLegendName() async {
+    final controller = TextEditingController(text: _legendName);
+    final formKey = GlobalKey<FormState>();
+    final selectedName = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Change legend name'),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: controller,
+            decoration: const InputDecoration(labelText: 'Legend name'),
+            maxLength: 30,
+            validator: _validateLabel,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (!(formKey.currentState?.validate() ?? false)) return;
+              Navigator.pop(context, controller.text.trim());
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+
+    if (!mounted || selectedName == null) return;
+    setState(() => _legendName = selectedName);
+  }
+
+  Future<void> _selectAxisNames() async {
+    final xAxisController = TextEditingController(text: _xAxisName);
+    final yAxisController = TextEditingController(text: _yAxisName);
+    final formKey = GlobalKey<FormState>();
+    final selectedNames = await showDialog<(String, String)>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Change axis names'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: xAxisController,
+                decoration: const InputDecoration(labelText: 'Horizontal axis'),
+                maxLength: 30,
+                validator: _validateLabel,
+              ),
+              TextFormField(
+                controller: yAxisController,
+                decoration: const InputDecoration(labelText: 'Vertical axis'),
+                maxLength: 30,
+                validator: _validateLabel,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (!(formKey.currentState?.validate() ?? false)) return;
+              Navigator.pop(context, (
+                xAxisController.text.trim(),
+                yAxisController.text.trim(),
+              ));
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    xAxisController.dispose();
+    yAxisController.dispose();
+
+    if (!mounted || selectedNames == null) return;
+    setState(() {
+      _xAxisName = selectedNames.$1;
+      _yAxisName = selectedNames.$2;
+    });
+  }
+
+  String? _validateLabel(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Enter an axis name.';
+    }
+    return null;
   }
 
   Future<void> _selectGraphType() async {
@@ -60,17 +175,17 @@ class ProgressScreenState extends State<ProgressScreen> {
           children: [
             ListTile(
               title: const Text('Line'),
-                trailing: _graphType == _ProgressGraphType.line
+              trailing: _graphType == _ProgressGraphType.line
                   ? const Icon(Icons.check)
                   : null,
-                onTap: () => Navigator.pop(context, _ProgressGraphType.line),
+              onTap: () => Navigator.pop(context, _ProgressGraphType.line),
             ),
             ListTile(
               title: const Text('Area'),
-                trailing: _graphType == _ProgressGraphType.area
+              trailing: _graphType == _ProgressGraphType.area
                   ? const Icon(Icons.check)
                   : null,
-                onTap: () => Navigator.pop(context, _ProgressGraphType.area),
+              onTap: () => Navigator.pop(context, _ProgressGraphType.area),
             ),
           ],
         ),
@@ -123,13 +238,13 @@ class ProgressScreenState extends State<ProgressScreen> {
     final features = _presenter.features
         .map(
           (feature) => Feature(
-            title: feature.title,
+            title: _legendName,
             color: _chartColor,
             data: feature.data,
           ),
         )
         .toList();
-        
+
     return Scaffold(
       appBar: AppBar(title: const Text('Progress')),
       body: Center(
@@ -141,15 +256,15 @@ class ProgressScreenState extends State<ProgressScreen> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(
+                  SizedBox(
                     width: 42,
                     child: Padding(
-                      padding: EdgeInsets.only(top: 140),
+                      padding: const EdgeInsets.only(top: 140),
                       child: RotatedBox(
                         quarterTurns: 3,
                         child: Text(
-                          'Volume (lbs)',
-                          style: TextStyle(
+                          _yAxisName,
+                          style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 13,
                           ),
@@ -173,8 +288,8 @@ class ProgressScreenState extends State<ProgressScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Weeks',
+            Text(
+              _xAxisName,
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
             ),
             const SizedBox(height: 12),
@@ -190,10 +305,7 @@ class ProgressScreenState extends State<ProgressScreen> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  features.first.title,
-                  style: const TextStyle(fontSize: 13),
-                ),
+                Text(_legendName, style: const TextStyle(fontSize: 13)),
               ],
             ),
             const SizedBox(height: 18),
