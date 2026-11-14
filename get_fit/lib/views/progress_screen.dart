@@ -1,4 +1,3 @@
-import 'package:draw_graph/draw_graph.dart';
 import 'package:draw_graph/models/feature.dart';
 import 'package:flutter/material.dart';
 
@@ -6,7 +5,7 @@ import '../presenters/progress_presenter.dart';
 
 enum _ProgressGraphType { line, area }
 
-enum _ProgressCustomization { type, color }
+enum _ProgressCustomization { type, color, axes, legendName }
 
 class ProgressScreen extends StatefulWidget {
   const ProgressScreen({super.key});
@@ -20,6 +19,9 @@ class ProgressScreenState extends State<ProgressScreen> {
   late final Stream<ProgressChartData> _chart = _presenter.watchChart();
   _ProgressGraphType _graphType = _ProgressGraphType.area;
   Color _chartColor = Colors.blue;
+  String _xAxisName = 'Weeks';
+  String _yAxisName = 'Volume (lbs)';
+  String _legendName = 'Progress';
 
   Future<void> _customizeGraph() async {
     final customization = await showDialog<_ProgressCustomization>(
@@ -37,6 +39,15 @@ class ProgressScreenState extends State<ProgressScreen> {
               title: const Text('Change color'),
               onTap: () => Navigator.pop(context, _ProgressCustomization.color),
             ),
+            ListTile(
+              title: const Text('Change axis names'),
+              onTap: () => Navigator.pop(context, _ProgressCustomization.axes),
+            ),
+            ListTile(
+              title: const Text('Change legend name'),
+              onTap: () =>
+                  Navigator.pop(context, _ProgressCustomization.legendName),
+            ),
           ],
         ),
       ),
@@ -45,9 +56,113 @@ class ProgressScreenState extends State<ProgressScreen> {
     if (!mounted || customization == null) return;
     if (customization == _ProgressCustomization.type) {
       await _selectGraphType();
-    } else {
+    } else if (customization == _ProgressCustomization.color) {
       await _selectGraphColor();
+    } else if (customization == _ProgressCustomization.axes) {
+      await _selectAxisNames();
+    } else {
+      await _selectLegendName();
     }
+  }
+
+  Future<void> _selectLegendName() async {
+    final controller = TextEditingController(text: _legendName);
+    final formKey = GlobalKey<FormState>();
+    final selectedName = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Change legend name'),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: controller,
+            decoration: const InputDecoration(labelText: 'Legend name'),
+            maxLength: 30,
+            validator: _validateLabel,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (!(formKey.currentState?.validate() ?? false)) return;
+              Navigator.pop(context, controller.text.trim());
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+
+    if (!mounted || selectedName == null) return;
+    setState(() => _legendName = selectedName);
+  }
+
+  Future<void> _selectAxisNames() async {
+    final xAxisController = TextEditingController(text: _xAxisName);
+    final yAxisController = TextEditingController(text: _yAxisName);
+    final formKey = GlobalKey<FormState>();
+    final selectedNames = await showDialog<(String, String)>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Change axis names'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: xAxisController,
+                decoration: const InputDecoration(labelText: 'Horizontal axis'),
+                maxLength: 30,
+                validator: _validateLabel,
+              ),
+              TextFormField(
+                controller: yAxisController,
+                decoration: const InputDecoration(labelText: 'Vertical axis'),
+                maxLength: 30,
+                validator: _validateLabel,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (!(formKey.currentState?.validate() ?? false)) return;
+              Navigator.pop(context, (
+                xAxisController.text.trim(),
+                yAxisController.text.trim(),
+              ));
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    xAxisController.dispose();
+    yAxisController.dispose();
+
+    if (!mounted || selectedNames == null) return;
+    setState(() {
+      _xAxisName = selectedNames.$1;
+      _yAxisName = selectedNames.$2;
+    });
+  }
+
+  String? _validateLabel(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Enter an axis name.';
+    }
+    return null;
   }
 
   Future<void> _selectGraphType() async {
@@ -119,47 +234,39 @@ class ProgressScreenState extends State<ProgressScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Progress')),
-    body: StreamBuilder<ProgressChartData>(
-      stream: _chart,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Center(
-            child: Text('Unable to load workout progress: ${snapshot.error}'),
-          );
-        }
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
+  Widget build(BuildContext context) {
+    final features = _presenter.features
+        .map(
+          (feature) => Feature(
+            title: _legendName,
+            color: _chartColor,
+            data: feature.data,
+          ),
+        )
+        .toList();
 
-        final chart = snapshot.data!;
-        final feature = Feature(
-          title: 'Weekly volume',
-          color: _chartColor,
-          data: chart.values,
-        );
-        return Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(left: 8, right: 10),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(
-                      width: 42,
-                      child: Padding(
-                        padding: EdgeInsets.only(top: 140),
-                        child: RotatedBox(
-                          quarterTurns: 3,
-                          child: Text(
-                            'Volume (lb-reps)',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                            ),
+    return Scaffold(
+      appBar: AppBar(title: const Text('Progress')),
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(left: 8, right: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 42,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 140),
+                      child: RotatedBox(
+                        quarterTurns: 3,
+                        child: Text(
+                          _yAxisName,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
                           ),
                         ),
                       ),
@@ -205,27 +312,45 @@ class ProgressScreenState extends State<ProgressScreen> {
                   Text(feature.title, style: const TextStyle(fontSize: 13)),
                 ],
               ),
-              const SizedBox(height: 18),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  ElevatedButton(
-                    onPressed: _customizeGraph,
-                    child: const Text('Customize'),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _xAxisName,
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 14,
+                  height: 14,
+                  decoration: BoxDecoration(
+                    color: features.first.color,
+                    borderRadius: BorderRadius.circular(4),
                   ),
-                  const SizedBox(width: 12),
-                  ElevatedButton(
-                    onPressed: () {},
-                    child: const Text('Analysis'),
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton(onPressed: () {}, child: const Text('Share')),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
-    ),
-  );
+                ),
+                const SizedBox(width: 8),
+                Text(_legendName, style: const TextStyle(fontSize: 13)),
+              ],
+            ),
+            const SizedBox(height: 18),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton(
+                  onPressed: _customizeGraph,
+                  child: const Text('Customize'),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton(onPressed: () {}, child: const Text('Analysis')),
+                const SizedBox(width: 12),
+                ElevatedButton(onPressed: () {}, child: const Text('Share')),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
