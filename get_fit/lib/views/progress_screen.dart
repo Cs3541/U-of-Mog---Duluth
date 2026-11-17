@@ -270,7 +270,6 @@ class ProgressScreenState extends State<ProgressScreen> {
                             quarterTurns: 3,
                             child: Text(
                               _yAxisName,
-                          
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 13,
