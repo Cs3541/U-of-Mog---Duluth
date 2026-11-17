@@ -104,6 +104,7 @@ class ExpRules {
         streakDays: bonusDays,
       );
       final newTotal = currentExp + gained;
+      final workouts = (data['workoutsCompleted'] as num?)?.toInt() ?? 0;
 
       tx.set(
         ref,
@@ -112,6 +113,7 @@ class ExpRules {
           'streakDays': streak,
           'bestStreak': newBest,
           'lastStreakDate': today,
+          'workoutsCompleted': workouts + 1,
         },
         SetOptions(merge: true),
       );
@@ -130,8 +132,8 @@ class ExpRules {
             type: FeedType.exp,
             title: '+$gained EXP',
             subtitle: streakBonus > 0
-                ? '$durationMinutes min activity · includes +$streakBonus streak bonus'
-                : '$durationMinutes min activity',
+                ? '$durationMinutes min workout · includes +$streakBonus streak bonus'
+                : '$durationMinutes min workout',
           ),
         );
       }
@@ -149,7 +151,6 @@ class ExpRules {
         );
       }
 
-      final workouts = (data['workoutsCompleted'] as num?)?.toInt() ?? 0;
       final earned = BadgeRules.newlyEarned(
         before: {
           MilestoneType.workoutsCompleted: workouts,
@@ -157,7 +158,7 @@ class ExpRules {
           MilestoneType.levelReached: levelBefore,
         },
         after: {
-          MilestoneType.workoutsCompleted: workouts,
+          MilestoneType.workoutsCompleted: workouts + 1,
           MilestoneType.streakDays: newBest,
           MilestoneType.levelReached: levelAfter,
         },
