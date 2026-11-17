@@ -28,15 +28,13 @@ class _WorkoutLoggingScreenState extends State<WorkoutLoggingScreen> {
   late final _presenter = widget.presenter ?? LoggingPresenter();
   final _expPresenter = ExpPresenter();
   bool _saving = false;
+  bool _loadingExercises = false;
   bool _canLeave = false;
   bool _showingDiscard = false;
   String? _error;
 
   Future<void> _leave() async {
-    if (_saving) {
-      _close(null);
-      return;
-    }
+    if (_saving) return;
     if (_showingDiscard) return;
     _showingDiscard = true;
     final discard = await showDialog<bool>(
@@ -69,10 +67,34 @@ class _WorkoutLoggingScreenState extends State<WorkoutLoggingScreen> {
   }
 
   Future<void> _addExercise() async {
+    if (_loadingExercises || _saving) return;
+    setState(() {
+      _loadingExercises = true;
+      _error = null;
+    });
+    late final List<String> names;
+    try {
+      names = await _presenter.loadCommonExercises();
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error = 'Could not load exercises. Tap Add exercise to retry.',
+        );
+      }
+      return;
+    } finally {
+      if (mounted) setState(() => _loadingExercises = false);
+    }
+    if (!mounted || _canLeave || _showingDiscard) return;
+    if (names.isEmpty) {
+      setState(() => _error = 'No common exercises have been added yet.');
+      return;
+    }
     final name = await showSearch<String?>(
       context: context,
       delegate: _ExerciseSearch(
-        _presenter.exercises.map((e) => e.name).toSet(),
+        _presenter.exercises.map((e) => e.name.toLowerCase()).toSet(),
+        names,
       ),
     );
     if (!mounted || name == null || !_presenter.canAddSet) return;
@@ -167,7 +189,7 @@ class _WorkoutLoggingScreenState extends State<WorkoutLoggingScreen> {
               const Padding(
                 padding: EdgeInsets.only(bottom: 16),
                 child: Text(
-                  'Saving workout. You can go back while it finishes.',
+                  'Saving workout. Please stay on this screen until it finishes.',
                 ),
               ),
             if (_presenter.exercises.isEmpty)
@@ -178,9 +200,13 @@ class _WorkoutLoggingScreenState extends State<WorkoutLoggingScreen> {
             for (final exercise in _presenter.exercises)
               _exerciseCard(exercise),
             OutlinedButton.icon(
-              onPressed: _presenter.canAddSet ? _addExercise : null,
+              onPressed: _presenter.canAddSet && !_loadingExercises
+                  ? _addExercise
+                  : null,
               icon: const Icon(Icons.add),
-              label: const Text('Add exercise'),
+              label: Text(
+                _loadingExercises ? 'Loading exercises…' : 'Add exercise',
+              ),
             ),
             Text(
               '${_presenter.setCount}/${LoggingModel.maxWorkoutSets} sets • Weight in lb; use 0 for bodyweight.',
@@ -195,7 +221,7 @@ class _WorkoutLoggingScreenState extends State<WorkoutLoggingScreen> {
               ),
             const SizedBox(height: 16),
             FilledButton(
-              onPressed: _saving ? null : _save,
+              onPressed: _saving || _loadingExercises ? null : _save,
               style: FilledButton.styleFrom(
                 backgroundColor: Colors.green,
                 foregroundColor: Colors.white,
@@ -328,8 +354,10 @@ class _WorkoutLoggingScreenState extends State<WorkoutLoggingScreen> {
 }
 
 class _ExerciseSearch extends SearchDelegate<String?> {
-  _ExerciseSearch(this.selected) : super(searchFieldLabel: 'Search exercises');
+  _ExerciseSearch(this.selected, this.names)
+    : super(searchFieldLabel: 'Search exercises');
   final Set<String> selected;
+  final List<String> names;
 
   @override
   List<Widget> buildActions(BuildContext context) => [
@@ -346,10 +374,10 @@ class _ExerciseSearch extends SearchDelegate<String?> {
   Widget buildSuggestions(BuildContext context) => buildResults(context);
   @override
   Widget buildResults(BuildContext context) {
-    final matches = LoggingModel.commonExercises
+    final matches = names
         .where(
           (name) =>
-              !selected.contains(name) &&
+              !selected.contains(name.toLowerCase()) &&
               name.toLowerCase().contains(query.trim().toLowerCase()),
         )
         .toList();
