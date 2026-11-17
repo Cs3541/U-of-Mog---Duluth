@@ -2,16 +2,18 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class LoggingModel {
-  static const commonExercises = [
-    'Bench Press',
-    'Squat',
-    'Deadlift',
-    'Overhead Press',
-    'Barbell Row',
-    'Pull-up',
-    'Push-up',
-    'Biceps Curl',
-  ];
+  Future<List<String>> loadCommonExercises() async {
+    final document = await FirebaseFirestore.instance
+        .collection('baseExercises')
+        .doc('exercises')
+        .get();
+    final names = document.data()?.keys.toList() ?? <String>[];
+    if (names.any((name) => name.trim().isEmpty || name.length > 100)) {
+      throw StateError('Exercise names must contain 1–100 characters.');
+    }
+    names.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return names;
+  }
 
   static const maxWorkoutSets = 100;
   FirebaseAuth get _auth => FirebaseAuth.instance;
@@ -44,7 +46,10 @@ class LoggingModel {
           entries = sets.docs.map((set) => set.data()).toList();
         }
         for (final entry in entries) {
-          if (entry['exerciseName'] != exerciseName) continue;
+          if ((entry['exerciseName'] as String).trim().toLowerCase() !=
+              exerciseName.trim().toLowerCase()) {
+            continue;
+          }
           // Older workouts stored several identical sets in one entry.
           for (var i = 0; i < (entry['sets'] as int); i++) {
             if (matches.length == maxWorkoutSets) break;
