@@ -46,6 +46,8 @@ class LoggingPresenter {
       exercises.fold(0, (count, exercise) => count + exercise.sets.length);
   bool get canAddSet => setCount < LoggingModel.maxWorkoutSets;
 
+  Future<List<String>> loadCommonExercises() => _model.loadCommonExercises();
+
   Future<void> loadPrevious(WorkoutExercise exercise) async {
     try {
       exercise.previous = await _model.previousSets(exercise.name);
