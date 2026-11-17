@@ -1,6 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-
 import '../models/exercise_model.dart';
+import '../presenters/exp_presenter.dart';
 import '../presenters/logging_presenter.dart';
 
 class WorkoutLoggingScreen extends StatefulWidget {
@@ -25,6 +26,7 @@ class WorkoutLoggingScreen extends StatefulWidget {
 
 class _WorkoutLoggingScreenState extends State<WorkoutLoggingScreen> {
   late final _presenter = widget.presenter ?? LoggingPresenter();
+  final _expPresenter = ExpPresenter();
   bool _saving = false;
   bool _canLeave = false;
   bool _showingDiscard = false;
@@ -83,6 +85,14 @@ class _WorkoutLoggingScreenState extends State<WorkoutLoggingScreen> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _awardExp() async {
+    try {
+      await _expPresenter.awardWorkout();
+    } catch (e) {
+      debugPrint('EXP award failed: $e');
+    }
+  }
+
   Future<void> _save() async {
     if (_saving) return;
     FocusScope.of(context).unfocus();
@@ -91,7 +101,12 @@ class _WorkoutLoggingScreenState extends State<WorkoutLoggingScreen> {
       _error = null;
     });
     try {
-      final save = _presenter.save(workoutName: widget.workoutName);
+      final save = _presenter
+          .save(workoutName: widget.workoutName)
+          .then((error) {
+        if (error == null) unawaited(_awardExp());
+        return error;
+      });
       widget.onSaveStarted?.call(save);
       final error = await save;
       if (!mounted || _canLeave) return;
