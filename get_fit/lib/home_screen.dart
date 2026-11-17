@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+
+import '../models/event_model.dart';
 import '../models/exp_model.dart';
 import '../models/feed_model.dart';
+import '../repositories/event_repository.dart';
 import '../presenters/home_presenter.dart';
 import '../views/friend_alerts.dart';
 
@@ -13,16 +16,19 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final HomePresenter _presenter = HomePresenter();
+  final EventRepository _eventRepository = EventRepository();
 
   final Set<String> _hidden = {};
 
   String? _uid;
   Stream<ExpStatus>? _expStream;
   Stream<List<FeedItem>>? _feedStream;
+  late final Stream<List<Event>> _eventStream;
 
   @override
   void initState() {
     super.initState();
+    _eventStream = _eventRepository.watchEvents();
     _uid = _presenter.currentUid;
     if (_uid != null) {
       _expStream = _presenter.watchExp(_uid!);
@@ -58,6 +64,90 @@ class _HomeScreenState extends State<HomeScreen> {
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
+  void _showUpcomingEvents(List<Event> events) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => FractionallySizedBox(
+        heightFactor: 0.7,
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Upcoming events',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 12),
+                if (events.isEmpty)
+                  const Expanded(
+                    child: Center(child: Text('No upcoming events.')),
+                  )
+                else
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: events.length,
+                      itemBuilder: (context, index) {
+                        final event = events[index];
+                        final localizations = MaterialLocalizations.of(context);
+                        final date = localizations.formatMediumDate(event.date);
+                        final time = localizations.formatTimeOfDay(
+                          TimeOfDay.fromDateTime(event.date),
+                        );
+
+                        return ListTile(
+                          leading: Icon(event.category.icon),
+                          title: Text(event.title),
+                          subtitle: Text(
+                            [
+                              '$date at $time',
+                              if (event.location.isNotEmpty) event.location,
+                            ].join(' · '),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUpcomingEventsButton() {
+    return StreamBuilder<List<Event>>(
+      stream: _eventStream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Text('Could not load upcoming events.');
+        }
+
+        final upcoming =
+            snapshot.data
+                ?.where((event) => event.date.isAfter(DateTime.now()))
+                .toList() ??
+            [];
+
+        return OutlinedButton.icon(
+          onPressed: snapshot.hasData
+              ? () => _showUpcomingEvents(upcoming)
+              : null,
+          icon: const Icon(Icons.notifications_outlined),
+          label: Text(
+            snapshot.hasData
+                ? 'Upcoming events (${upcoming.length})'
+                : 'Loading upcoming events…',
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -70,6 +160,8 @@ class _HomeScreenState extends State<HomeScreen> {
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
+            const SizedBox(height: 16),
+            _buildUpcomingEventsButton(),
             const SizedBox(height: 16),
             const FriendAlerts(),
             if (_expStream != null) _buildLevelCard(),
@@ -101,12 +193,17 @@ class _HomeScreenState extends State<HomeScreen> {
                     Text(
                       'Level ${status.level}',
                       style: const TextStyle(
-                          fontSize: 20, fontWeight: FontWeight.bold),
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const Spacer(),
                     if (status.streakDays > 0) ...[
-                      const Icon(Icons.local_fire_department,
-                          color: Colors.orange, size: 20),
+                      const Icon(
+                        Icons.local_fire_department,
+                        color: Colors.orange,
+                        size: 20,
+                      ),
                       const SizedBox(width: 4),
                       Text('${status.streakDays}-day streak'),
                     ],
@@ -139,16 +236,19 @@ class _HomeScreenState extends State<HomeScreen> {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final items =
-            snapshot.data!.where((i) => !_hidden.contains(i.id)).toList();
+        final items = snapshot.data!
+            .where((i) => !_hidden.contains(i.id))
+            .toList();
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
               children: [
-                Text('Recent activity',
-                    style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  'Recent activity',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
                 const Spacer(),
                 if (items.isNotEmpty)
                   TextButton(
