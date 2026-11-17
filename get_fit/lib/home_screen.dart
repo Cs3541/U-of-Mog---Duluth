@@ -182,46 +182,82 @@ class _HomeScreenState extends State<HomeScreen> {
         final status = snapshot.data;
         if (status == null) return const SizedBox.shrink();
 
-        return Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+        final expLeft = status.expToNextLevel - status.expIntoLevel;
+        final closeToLevel = status.progress >= 0.95;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (closeToLevel)
+              _buildNotice(
+                icon: Icons.trending_up,
+                color: Colors.green,
+                text: 'Almost there! Only $expLeft EXP until level '
+                    '${status.level + 1}.',
+              ),
+            if (status.streakDays > 0)
+              _buildNotice(
+                icon: Icons.local_fire_department,
+                color: Colors.orange,
+                text: 'You are on a ${status.streakDays}-day workout streak. '
+                    'Keep it going!',
+              ),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Level ${status.level}',
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          'Level ${status.level}',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const Spacer(),
+                        if (status.streakDays > 0) ...[
+                          const Icon(
+                            Icons.local_fire_department,
+                            color: Colors.orange,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 4),
+                          Text('${status.streakDays}-day streak'),
+                        ],
+                      ],
                     ),
-                    const Spacer(),
-                    if (status.streakDays > 0) ...[
-                      const Icon(
-                        Icons.local_fire_department,
-                        color: Colors.orange,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 4),
-                      Text('${status.streakDays}-day streak'),
-                    ],
+                    const SizedBox(height: 8),
+                    LinearProgressIndicator(value: status.progress, minHeight: 8),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${status.expIntoLevel} / ${status.expToNextLevel} EXP '
+                      'to level ${status.level + 1}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                LinearProgressIndicator(value: status.progress, minHeight: 8),
-                const SizedBox(height: 6),
-                Text(
-                  '${status.expIntoLevel} / ${status.expToNextLevel} EXP '
-                  'to level ${status.level + 1}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
+              ),
             ),
-          ),
+          ],
         );
       },
+    );
+  }
+
+  Widget _buildNotice({
+    required IconData icon,
+    required Color color,
+    required String text,
+  }) {
+    return Card(
+      color: color.withAlpha(30),
+      child: ListTile(
+        leading: Icon(icon, color: color),
+        title: Text(text),
+      ),
     );
   }
 

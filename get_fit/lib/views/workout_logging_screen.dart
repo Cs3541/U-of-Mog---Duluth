@@ -109,7 +109,9 @@ class _WorkoutLoggingScreenState extends State<WorkoutLoggingScreen> {
 
   Future<void> _awardExp() async {
     try {
-      await _expPresenter.awardWorkout();
+      await _expPresenter.awardWorkout(
+        DateTime.now().difference(_presenter.startedAt).inMinutes,
+      );
     } catch (e) {
       debugPrint('EXP award failed: $e');
     }
