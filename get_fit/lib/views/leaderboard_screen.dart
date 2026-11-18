@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/profile_model.dart';
 import '../presenters/leaderboard_presenter.dart';
 import 'profile_screen.dart';
+import 'user_profile_screen.dart';
 
 class LeaderboardScreen extends StatefulWidget {
   const LeaderboardScreen({super.key});
@@ -13,6 +14,7 @@ class LeaderboardScreen extends StatefulWidget {
 class _LeaderboardScreenState extends State<LeaderboardScreen> {
   final LeaderboardPresenter _presenter = LeaderboardPresenter();
   late final Stream<List<Profile>> _stream = _presenter.watchLeaderboard();
+  late final Stream<Set<String>> _friendIds = _presenter.watchFriendIds();
 
   @override
   Widget build(BuildContext context) {
@@ -39,14 +41,20 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
                 final profiles = snapshot.data!;
-                return TabBarView(
-                  children: [
-                    _buildList(profiles, 'No one is on the leaderboard yet.'),
-                    _buildList(
-                      _presenter.friendsOnly(profiles),
-                      'No friends yet. Friends are coming soon.',
-                    ),
-                  ],
+                return StreamBuilder<Set<String>>(
+                  stream: _friendIds,
+                  builder: (context, friendSnap) {
+                    final friendIds = friendSnap.data ?? <String>{};
+                    return TabBarView(
+                      children: [
+                        _buildList(profiles, 'No one is on the leaderboard yet.'),
+                        _buildList(
+                          _presenter.friendsOnly(profiles, friendIds),
+                          'No friends yet. Add friends from your Profile.',
+                        ),
+                      ],
+                    );
+                  },
                 );
               },
             ),
@@ -97,6 +105,15 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               ),
             ),
             trailing: _buildLevelBadge(profile.level),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => UserProfileScreen(
+                  uid: profile.uid,
+                  initialName: profile.displayName,
+                ),
+              ),
+            ),
           ),
         );
       },

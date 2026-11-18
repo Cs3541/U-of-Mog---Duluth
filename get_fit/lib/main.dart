@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -10,7 +11,13 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
 
+  StreamSubscription? badgeSync;
+  StreamSubscription? workoutSync;
   FirebaseAuth.instance.authStateChanges().listen((user) async {
+    await badgeSync?.cancel();
+    await workoutSync?.cancel();
+    badgeSync = null;
+    workoutSync = null;
     if (user == null) return;
     try {
       await ExpRules.awardWelcomeBonus(
@@ -27,6 +34,10 @@ void main() async {
       );
     } catch (e) {
       debugPrint('Could not set up profile: $e');
+    }
+    if (FirebaseAuth.instance.currentUser?.uid == user.uid) {
+      badgeSync = ProfileRules.watchBadgeSync(user.uid);
+      workoutSync = ProfileRules.watchLastWorkoutSync(user.uid);
     }
   });
 

@@ -104,10 +104,42 @@ class BadgeRules {
 
   static Future<List<BadgeProgress>> getBadgeProgress(String uid) async {
     final snapshot = await ExpRules.userDoc(uid).get();
-    final data = snapshot.data() ?? {};
+    return progressFromData(snapshot.data() ?? {});
+  }
 
+  static Map<String, DateTime?> parseEarned(Map<String, dynamic>? data) {
+    final ids = allBadges.map((b) => b.id).toSet();
+    return {
+      for (final e in (data ?? const <String, dynamic>{}).entries)
+        if (ids.contains(e.key))
+          e.key: e.value is Timestamp ? (e.value as Timestamp).toDate() : null,
+    };
+  }
+
+  static List<BadgeDefinition> recent(
+    Map<String, DateTime?> earned, {
+    int limit = 3,
+  }) {
+    final list = allBadges.where((b) => earned.containsKey(b.id)).toList();
+    final now = DateTime.now();
+    list.sort((a, b) {
+      final byTime = (earned[b.id] ?? now).compareTo(earned[a.id] ?? now);
+      if (byTime != 0) return byTime;
+      return allBadges.indexOf(b).compareTo(allBadges.indexOf(a));
+    });
+    return list.take(limit).toList();
+  }
+
+  static Set<String> earnedIds(Map<String, dynamic> userData) =>
+      progressFromData(userData)
+          .where((p) => p.isAchieved)
+          .map((p) => p.badgeId)
+          .toSet();
+
+  static List<BadgeProgress> progressFromData(Map<String, dynamic> data) {
     final workouts = (data['workoutsCompleted'] as num?)?.toInt() ?? 0;
-    final streak = (data['streakDays'] as num?)?.toInt() ?? 0;
+    final currentStreak = ExpRules.currentStreak(data);
+    final bestStreak = ExpRules.bestStreak(data);
     final level =
         ExpRules.levelForExp((data['totalExp'] as num?)?.toInt() ?? 0);
     final isNewUser = data['welcomeBonusAwarded'] == true ? 1 : 0;
@@ -117,7 +149,8 @@ class BadgeRules {
       final progress = switch (b.type) {
         MilestoneType.newUser => isNewUser,
         MilestoneType.workoutsCompleted => workouts,
-        MilestoneType.streakDays => streak,
+        MilestoneType.streakDays =>
+          bestStreak >= b.threshold ? bestStreak : currentStreak,
         MilestoneType.levelReached => level,
       };
       return BadgeProgress(

@@ -2,10 +2,20 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class Workout {
+  static const Map<String, List<String>> musclesByGroup = {
+    'Chest': ['Pectorals', 'Upper chest', 'Lower chest'],
+    'Back': ['Lats', 'Traps', 'Rhomboids', 'Lower back'],
+    'Shoulders': ['Front delts', 'Side delts', 'Rear delts'],
+    'Arms': ['Biceps', 'Triceps', 'Forearms'],
+    'Legs': ['Quadriceps', 'Hamstrings', 'Glutes', 'Calves'],
+    'Core': ['Abdominals', 'Obliques'],
+    'Full Body': ['Full body'],
+  };
+
   final String? id;
   final String? workoutName;
-  final String? muscleGroup;
-  final String? muscle;
+  final String? muscleGroup; //drop down menu for muscle group selection
+  final String? muscle; //drop down menu for muscle selection
 
   Workout({
     this.id,

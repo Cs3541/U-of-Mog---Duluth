@@ -4,8 +4,11 @@ import '../models/badge_model.dart';
 class BadgePresenter {
   List<BadgeDefinition> get allBadges => BadgeRules.allBadges;
 
-  Future<List<BadgeProgress>> getBadgeProgress() {
-    final uid = FirebaseAuth.instance.currentUser!.uid;
+  String? get currentUid => FirebaseAuth.instance.currentUser?.uid;
+
+  Future<List<BadgeProgress>> getBadgeProgress() async {
+    final uid = currentUid;
+    if (uid == null) return [];
     return BadgeRules.getBadgeProgress(uid);
   }
 }

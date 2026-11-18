@@ -1,5 +1,8 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
+import 'badge_model.dart';
 import 'exp_model.dart';
 
 class Profile {
@@ -40,6 +43,47 @@ class ProfileRules {
   static DocumentReference<Map<String, dynamic>> profileDoc(String uid) =>
       collection.doc(uid);
 
+  static DocumentReference<Map<String, dynamic>> friendBadgesDoc(String uid) =>
+      profileDoc(uid).collection('friendsOnly').doc('badges');
+
+  static Stream<Map<String, DateTime?>> watchFriendBadges(String uid) =>
+      friendBadgesDoc(uid)
+          .snapshots()
+          .map((s) => BadgeRules.parseEarned(s.data()));
+
+  static DocumentReference<Map<String, dynamic>> activityDoc(String uid) =>
+      profileDoc(uid).collection('friendsOnly').doc('activity');
+
+  static Stream<DateTime?> watchLastWorkout(String uid) =>
+      activityDoc(uid).snapshots().map((s) {
+        final ts = s.data()?['lastWorkoutAt'];
+        return ts is Timestamp ? ts.toDate() : null;
+      });
+
+  static StreamSubscription<QuerySnapshot<Map<String, dynamic>>>
+      watchLastWorkoutSync(String uid) {
+    Timestamp? synced;
+    return ExpRules.userDoc(uid)
+        .collection('workoutLogs')
+        .orderBy('completedAt', descending: true)
+        .limit(1)
+        .snapshots()
+        .listen(
+      (snap) async {
+        if (snap.docs.isEmpty) return;
+        final ts = snap.docs.first.data()['completedAt'];
+        if (ts is! Timestamp || ts == synced) return;
+        try {
+          await activityDoc(uid).set({'lastWorkoutAt': ts});
+          synced = ts;
+        } catch (e) {
+          debugPrint('Could not sync last workout: $e');
+        }
+      },
+      onError: (Object e) => debugPrint('Last workout sync stopped: $e'),
+    );
+  }
+
   static String? validateName(String name) {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return 'Enter a display name.';
@@ -78,6 +122,73 @@ class ProfileRules {
             validateName(name) == null ? name : defaultName;
       }
       tx.set(ref, data, SetOptions(merge: true));
+    });
+  }
+
+  static StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>
+      watchBadgeSync(String uid) {
+    var synced = <String>{};
+    var migrated = false;
+    return ExpRules.userDoc(uid).snapshots().listen(
+      (snap) async {
+        final data = snap.data();
+        if (data == null) return;
+        if (migrated && synced.containsAll(BadgeRules.earnedIds(data))) return;
+        try {
+          synced = await syncBadges(uid, data);
+          migrated = true;
+        } catch (e) {
+          debugPrint('Could not sync badges: $e');
+        }
+      },
+      onError: (Object e) => debugPrint('Badge sync stopped: $e'),
+    );
+  }
+
+  static Future<Set<String>> syncBadges(
+    String uid,
+    Map<String, dynamic> userData,
+  ) {
+    final earned = BadgeRules.earnedIds(userData);
+    final knownIds = BadgeRules.allBadges.map((b) => b.id).toSet();
+    final joinedAt = userData['joinedAt'];
+    final badgeRef = friendBadgesDoc(uid);
+    final profileRef = profileDoc(uid);
+
+    return FirebaseFirestore.instance.runTransaction((tx) async {
+      final badgeSnap = await tx.get(badgeRef);
+      final profileSnap = await tx.get(profileRef);
+
+      final have = (badgeSnap.data() ?? const {}).keys.toSet();
+      final legacy = profileSnap.data()?['badges'];
+      final toWrite = <String, dynamic>{};
+
+      if (legacy is Map) {
+        for (final e in legacy.entries) {
+          final id = e.key;
+          if (id is String &&
+              knownIds.contains(id) &&
+              !have.contains(id) &&
+              e.value is Timestamp) {
+            toWrite[id] = e.value;
+          }
+        }
+      }
+
+      for (final id in earned) {
+        if (have.contains(id) || toWrite.containsKey(id)) continue;
+        toWrite[id] = id == 'new_user' && joinedAt is Timestamp
+            ? joinedAt
+            : FieldValue.serverTimestamp();
+      }
+
+      if (toWrite.isNotEmpty) {
+        tx.set(badgeRef, toWrite, SetOptions(merge: true));
+      }
+      if (legacy != null) {
+        tx.update(profileRef, {'badges': FieldValue.delete()});
+      }
+      return {...have, ...toWrite.keys};
     });
   }
 
