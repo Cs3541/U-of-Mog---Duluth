@@ -45,6 +45,7 @@ class Event {
     required this.category,
     this.location = '',
     this.description = '',
+    this.attendingUids = const [],
   });
 
   final String id;
@@ -53,6 +54,7 @@ class Event {
   final EventCategory category;
   final String location;
   final String description;
+  final List<String> attendingUids;
 
   // Convert event into Firebase data
   Map<String, dynamic> toMap() => {
@@ -61,6 +63,7 @@ class Event {
         'category': category.name,
         'location': location,
         'description': description,
+        'attendingUids': attendingUids,
       };
 
   // Convert Firebase document into an Event
@@ -80,6 +83,9 @@ class Event {
       ),
       location: (d['location'] as String?) ?? '',
       description: (d['description'] as String?) ?? '',
+      attendingUids:
+          (d['attendingUids'] as List<dynamic>?)?.whereType<String>().toList() ??
+          [],
     );
   }
 }
