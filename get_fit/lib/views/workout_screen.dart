@@ -17,6 +17,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
   Workout? _selectedWorkout;
   bool _isLoading = true;
   bool _isOpening = false;
+  String _muscleGroupSearch = '';
   String? _loadError;
   final Set<String> _deletingWorkoutIds = {};
 
@@ -171,7 +172,18 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
   }
 
   Widget _buildWorkoutsContent() {
-    final workouts = _presenter.workouts;
+    final allWorkouts = _presenter.workouts;
+    final search = _muscleGroupSearch.trim().toLowerCase();
+    final workouts = search.isEmpty
+        ? allWorkouts
+        : allWorkouts
+              .where(
+                (workout) =>
+                    workout.muscleGroup?.toLowerCase().contains(search) ??
+                    false,
+              )
+              .toList();
+
     return _isLoading
         ? const Center(child: CircularProgressIndicator())
         : _loadError != null
@@ -210,12 +222,40 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 16),
-              if (workouts.isEmpty)
+              TextField(
+                decoration: InputDecoration(
+                  labelText: 'Search by muscle group',
+                  hintText: 'e.g. Chest, Back, Legs',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _muscleGroupSearch.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: 'Clear search',
+                          onPressed: () =>
+                              setState(() => _muscleGroupSearch = ''),
+                          icon: const Icon(Icons.clear),
+                        ),
+                ),
+                onChanged: (value) =>
+                    setState(() => _muscleGroupSearch = value),
+              ),
+              const SizedBox(height: 8),
+              if (allWorkouts.isEmpty)
                 const Card(
                   child: Padding(
                     padding: EdgeInsets.all(20),
                     child: Text(
                       'You have no saved workouts yet. Add one to get started.',
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                )
+              else if (workouts.isEmpty)
+                const Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Text(
+                      'No workouts match that muscle group.',
                       textAlign: TextAlign.center,
                     ),
                   ),

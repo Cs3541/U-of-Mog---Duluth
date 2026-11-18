@@ -14,8 +14,8 @@ class Workout {
 
   final String? id;
   final String? workoutName;
-  final String? muscleGroup; //drop down menu for muscle group selection
-  final String? muscle; //drop down menu for muscle selection
+  final String? muscleGroup; 
+  final String? muscle; 
 
   Workout({
     this.id,
