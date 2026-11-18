@@ -64,58 +64,131 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showUpcomingEvents(List<Event> events) {
+    final goingEventIds = <String>{
+      if (_uid != null)
+        for (final event in events)
+          if (event.attendingUids.contains(_uid)) event.id,
+    };
+    final pendingEventIds = <String>{};
+
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
-      builder: (context) => FractionallySizedBox(
-        heightFactor: 0.7,
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Upcoming events',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 12),
-                if (events.isEmpty)
-                  const Expanded(
-                    child: Center(child: Text('No upcoming events.')),
-                  )
-                else
-                  Expanded(
-                    child: ListView.builder(
-                      itemCount: events.length,
-                      itemBuilder: (context, index) {
-                        final event = events[index];
-                        final localizations = MaterialLocalizations.of(context);
-                        final date = localizations.formatMediumDate(event.date);
-                        final time = localizations.formatTimeOfDay(
-                          TimeOfDay.fromDateTime(event.date),
-                        );
-
-                        return ListTile(
-                          leading: Icon(event.category.icon),
-                          title: Text(event.title),
-                          subtitle: Text(
-                            [
-                              '$date at $time',
-                              if (event.location.isNotEmpty) event.location,
-                            ].join(' · '),
-                          ),
-                        );
-                      },
-                    ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) => FractionallySizedBox(
+          heightFactor: 0.7,
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Upcoming events',
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
-              ],
+                  const SizedBox(height: 12),
+                  if (events.isEmpty)
+                    const Expanded(
+                      child: Center(child: Text('No upcoming events.')),
+                    )
+                  else
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: events.length,
+                        itemBuilder: (context, index) {
+                          final event = events[index];
+                          final localizations =
+                              MaterialLocalizations.of(context);
+                          final date =
+                              localizations.formatMediumDate(event.date);
+                          final time = localizations.formatTimeOfDay(
+                            TimeOfDay.fromDateTime(event.date),
+                          );
+                          final isGoing = goingEventIds.contains(event.id);
+                          final isPending = pendingEventIds.contains(event.id);
+
+                          return ListTile(
+                            leading: Icon(event.category.icon),
+                            title: Text(event.title),
+                            subtitle: Text(
+                              [
+                                '$date at $time',
+                                if (event.location.isNotEmpty) event.location,
+                              ].join(' · '),
+                            ),
+                            trailing: _uid == null
+                                ? const OutlinedButton(
+                                    onPressed: null,
+                                    child: Text('Sign in to RSVP'),
+                                  )
+                                : isGoing
+                                ? OutlinedButton.icon(
+                                    onPressed: isPending
+                                        ? null
+                                        : () => _setEventAttendance(
+                                            event,
+                                            false,
+                                            goingEventIds,
+                                            pendingEventIds,
+                                            setSheetState,
+                                          ),
+                                    icon: const Icon(Icons.check),
+                                    label: const Text('Going'),
+                                  )
+                                : FilledButton(
+                                    onPressed: isPending
+                                        ? null
+                                        : () => _setEventAttendance(
+                                            event,
+                                            true,
+                                            goingEventIds,
+                                            pendingEventIds,
+                                            setSheetState,
+                                          ),
+                                    child: const Text("I'm going"),
+                                  ),
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _setEventAttendance(
+    Event event,
+    bool going,
+    Set<String> goingEventIds,
+    Set<String> pendingEventIds,
+    StateSetter setSheetState,
+  ) async {
+    final uid = _uid;
+    if (uid == null) return;
+
+    setSheetState(() => pendingEventIds.add(event.id));
+    try {
+      await _eventRepository.setGoing(event.id, uid, going);
+      setSheetState(() {
+        if (going) {
+          goingEventIds.add(event.id);
+        } else {
+          goingEventIds.remove(event.id);
+        }
+      });
+    } catch (error) {
+      if (mounted) {
+        _showError("Couldn't update your RSVP. Please try again.");
+      }
+    } finally {
+      setSheetState(() => pendingEventIds.remove(event.id));
+    }
   }
 
   Widget _buildUpcomingEventsButton() {

@@ -32,4 +32,12 @@ class EventRepository {
   Future<void> delete(String id) {
     return _col.doc(id).delete();
   }
+
+  Future<void> setGoing(String eventId, String uid, bool going) {
+    return _col.doc(eventId).update({
+      'attendingUids': going
+          ? FieldValue.arrayUnion([uid])
+          : FieldValue.arrayRemove([uid]),
+    });
+  }
 }
