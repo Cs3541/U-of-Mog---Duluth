@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/routine_model.dart';
 import '../models/workout_model.dart';
 import '../presenters/routine_presenter.dart';
+import 'workout_logging_screen.dart';
 
 class RoutineScreen extends StatefulWidget {
   const RoutineScreen({super.key});
@@ -14,6 +15,7 @@ class RoutineScreen extends StatefulWidget {
 class _RoutineScreenState extends State<RoutineScreen> {
   final RoutinePresenter _presenter = RoutinePresenter();
   bool _isLoading = true;
+  bool _isOpeningWorkout = false;
   String? _loadError;
   final Set<String> _pendingRoutineIds = {};
 
@@ -107,6 +109,32 @@ class _RoutineScreenState extends State<RoutineScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Could not add workout to routine: $error')),
       );
+    }
+  }
+
+  Future<void> _logWorkout(RoutineWorkout assignment) async {
+    if (_isOpeningWorkout) return;
+
+    final matchingWorkouts = _presenter.availableWorkouts.where(
+      (workout) => workout.id == assignment.workoutId,
+    );
+    final workout = matchingWorkouts.isEmpty ? null : matchingWorkouts.first;
+
+    setState(() => _isOpeningWorkout = true);
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => WorkoutLoggingScreen(
+          workoutName: assignment.workoutName,
+          muscleGroup: workout?.muscleGroup,
+          muscle: workout?.muscle,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    setState(() => _isOpeningWorkout = false);
+    if (result == true) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Workout logged.')));
     }
   }
 
@@ -258,6 +286,13 @@ class _RoutineScreenState extends State<RoutineScreen> {
                   ),
                   title: Text(assignment.workoutName),
                   subtitle: Text(assignment.days.join(' • ')),
+                  trailing: IconButton(
+                    tooltip: 'Log ${assignment.workoutName}',
+                    onPressed: _isOpeningWorkout
+                        ? null
+                        : () => _logWorkout(assignment),
+                    icon: const Icon(Icons.play_arrow),
+                  ),
                 ),
               ),
             OutlinedButton.icon(
