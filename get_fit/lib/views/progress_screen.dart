@@ -24,6 +24,52 @@ class ProgressScreenState extends State<ProgressScreen> {
   String _yAxisName = 'Volume (lbs)';
   String _legendName = 'Progress';
 
+  Future<void> _promptGraphAnalysis(ProgressChartData chart) async {
+    final shouldAnalyze = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Analyze your graph?'),
+        content: const Text('Would you like to run an analysis of your graph?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('No'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Yes'),
+          ),
+        ],
+      ),
+    );
+    if (shouldAnalyze != true || !mounted) return;
+
+    final analysis = chart.analyze();
+    final content = analysis.hasData
+        ? 'Trend: ${analysis.trend.toLowerCase()}'
+              '${analysis.trend == 'Stable' ? '' : ' by about ${_formatVolume(analysis.weeklyChange.abs())} lbs per week'}.\n\n'
+              'Predicted volume next week: ${_formatVolume(analysis.nextWeekVolume)} lbs.\n\n'
+              'This estimate uses a linear trend from the last ${chart.weeklyVolumes.length} weeks; actual results may vary.'
+        : 'There is not enough workout data from the last five weeks to identify a trend or predict next week\'s volume.';
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Graph analysis'),
+        content: Text(content),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatVolume(double volume) => volume == volume.roundToDouble()
+      ? volume.toInt().toString()
+      : volume.toStringAsFixed(1);
+
   Future<void> _customizeGraph() async {
     final customization = await showDialog<_ProgressCustomization>(
       context: context,
@@ -281,7 +327,10 @@ class ProgressScreenState extends State<ProgressScreen> {
                       Expanded(
                         child: LineGraph(
                           features: [feature],
-                          size: Size(MediaQuery.sizeOf(context).width - 80, 300),
+                          size: Size(
+                            MediaQuery.sizeOf(context).width - 80,
+                            300,
+                          ),
                           labelX: chart.weekLabels,
                           labelY: chart.volumeLabels,
                           graphOpacity: _graphType == _ProgressGraphType.area
@@ -337,7 +386,7 @@ class ProgressScreenState extends State<ProgressScreen> {
                     ),
                     const SizedBox(width: 12),
                     ElevatedButton(
-                      onPressed: () {},
+                      onPressed: () => _promptGraphAnalysis(chart),
                       child: const Text('Analysis'),
                     ),
                     const SizedBox(width: 12),
