@@ -1,5 +1,7 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+
 import '../models/exercise_model.dart';
 import '../presenters/exp_presenter.dart';
 import '../presenters/logging_presenter.dart';
@@ -12,6 +14,11 @@ class WorkoutLoggingScreen extends StatefulWidget {
     this.workoutName,
     this.muscleGroup,
     this.muscle,
+    this.initialExercises = const [],
+    this.initialCompleted = const [],
+    this.initialDraft = const [],
+    this.existingWorkoutId,
+    this.startedAt,
   });
 
   final LoggingPresenter? presenter;
@@ -19,19 +26,61 @@ class WorkoutLoggingScreen extends StatefulWidget {
   final String? workoutName;
   final String? muscleGroup;
   final String? muscle;
+  final List<ExerciseLog> initialExercises;
+  final List<bool> initialCompleted;
+  final List<Map<String, dynamic>> initialDraft;
+  final String? existingWorkoutId;
+  final DateTime? startedAt;
 
   @override
   State<WorkoutLoggingScreen> createState() => _WorkoutLoggingScreenState();
 }
 
 class _WorkoutLoggingScreenState extends State<WorkoutLoggingScreen> {
-  late final _presenter = widget.presenter ?? LoggingPresenter();
+  late final _presenter =
+      widget.presenter ??
+      LoggingPresenter(
+        initialExercises: widget.initialExercises,
+        initialCompleted: widget.initialCompleted,
+        initialDraft: widget.initialDraft,
+        existingWorkoutId: widget.existingWorkoutId,
+        startedAt: widget.startedAt,
+        workoutName: widget.workoutName,
+      );
   final _expPresenter = ExpPresenter();
+  late final _workoutNameController = TextEditingController(
+    text: widget.workoutName ?? '',
+  );
+  final _routineNameController = TextEditingController();
   bool _saving = false;
   bool _loadingExercises = false;
   bool _canLeave = false;
   bool _showingDiscard = false;
+  bool _saveAsRoutine = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_presenter.exercises.isNotEmpty) unawaited(_loadInitialExercises());
+  }
+
+  Future<void> _loadInitialExercises() async {
+    try {
+      await _presenter.loadCommonExercises();
+    } catch (_) {
+      // History and entered values remain usable if the catalog is offline.
+    }
+    await Future.wait(_presenter.exercises.map(_presenter.loadPrevious));
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _workoutNameController.dispose();
+    _routineNameController.dispose();
+    super.dispose();
+  }
 
   Future<void> _leave() async {
     if (_saving) return;
@@ -55,7 +104,14 @@ class _WorkoutLoggingScreenState extends State<WorkoutLoggingScreen> {
       ),
     );
     _showingDiscard = false;
-    if (discard == true && mounted) _close(false);
+    if (discard == true && mounted) {
+      await LoggingPresenter.clearDraft();
+      _close(false);
+    }
+  }
+
+  void _persistDraft() {
+    unawaited(_presenter.saveDraft(workoutName: _workoutNameController.text));
   }
 
   void _close(bool? saved) {
@@ -103,6 +159,7 @@ class _WorkoutLoggingScreenState extends State<WorkoutLoggingScreen> {
       _presenter.exercises.add(exercise);
       _error = null;
     });
+    _persistDraft();
     await _presenter.loadPrevious(exercise);
     if (mounted) setState(() {});
   }
@@ -117,6 +174,56 @@ class _WorkoutLoggingScreenState extends State<WorkoutLoggingScreen> {
 
   Future<void> _save() async {
     if (_saving) return;
+    final unchecked = [
+      for (final exercise in _presenter.exercises)
+        for (final set in exercise.sets)
+          if (!set.completed) (exercise, set),
+    ];
+    if (unchecked.isNotEmpty) {
+      final choice = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Unfinished sets'),
+          content: const Text(
+            'Mark every set complete, or leave the unchecked sets out of this workout?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'cancel'),
+              child: const Text('Keep logging'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'remove'),
+              child: const Text('Remove unchecked'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, 'complete'),
+              child: const Text('Mark all complete'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || choice == null || choice == 'cancel') return;
+      if (choice == 'complete') {
+        for (final (_, set) in unchecked) {
+          set.completed = true;
+        }
+      } else {
+        for (final (exercise, set) in unchecked) {
+          exercise.sets.remove(set);
+          if (exercise.sets.isEmpty) _presenter.exercises.remove(exercise);
+        }
+      }
+      _persistDraft();
+    }
+    if (_presenter.setCount == 0) {
+      setState(() => _error = 'Keep at least one finished set to save.');
+      return;
+    }
+    if (_saveAsRoutine && _routineNameController.text.trim().isEmpty) {
+      setState(() => _error = 'Enter a name for this private routine.');
+      return;
+    }
     FocusScope.of(context).unfocus();
     setState(() {
       _saving = true;
@@ -124,15 +231,25 @@ class _WorkoutLoggingScreenState extends State<WorkoutLoggingScreen> {
     });
     try {
       final save = _presenter
-          .save(workoutName: widget.workoutName)
+          .save(
+            workoutName: _workoutNameController.text.trim().isEmpty
+                ? null
+                : _workoutNameController.text.trim(),
+            routineName: _saveAsRoutine
+                ? _routineNameController.text.trim()
+                : null,
+          )
           .then((error) {
-        if (error == null) unawaited(_awardExp());
-        return error;
-      });
+            if (error == null && _presenter.existingWorkoutId == null) {
+              unawaited(_awardExp());
+            }
+            return error;
+          });
       widget.onSaveStarted?.call(save);
       final error = await save;
       if (!mounted || _canLeave) return;
       if (error == null) {
+        await LoggingPresenter.clearDraft();
         _close(true);
         return;
       }
@@ -140,6 +257,7 @@ class _WorkoutLoggingScreenState extends State<WorkoutLoggingScreen> {
         _error = error;
         _saving = false;
       });
+      _persistDraft();
     } catch (_) {
       if (mounted && !_canLeave) {
         setState(() {
@@ -160,9 +278,7 @@ class _WorkoutLoggingScreenState extends State<WorkoutLoggingScreen> {
     child: Scaffold(
       appBar: AppBar(
         title: Text(
-          widget.workoutName == null
-              ? 'Log workout'
-              : 'Log ${widget.workoutName}',
+          widget.existingWorkoutId == null ? 'Log workout' : 'Edit workout',
         ),
         backgroundColor: Colors.green,
         foregroundColor: Colors.white,
@@ -172,6 +288,39 @@ class _WorkoutLoggingScreenState extends State<WorkoutLoggingScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            TextField(
+              controller: _workoutNameController,
+              maxLength: 100,
+              onChanged: (_) => _persistDraft(),
+              decoration: const InputDecoration(
+                labelText: 'Workout name (optional)',
+                hintText: 'Date and exercises will name it automatically',
+              ),
+            ),
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _saveAsRoutine,
+              title: const Text('Save as a private routine'),
+              subtitle: const Text('Only you can access this routine.'),
+              controlAffinity: ListTileControlAffinity.leading,
+              onChanged: _saving
+                  ? null
+                  : (value) => setState(() {
+                      _saveAsRoutine = value ?? false;
+                      _error = null;
+                      _persistDraft();
+                    }),
+            ),
+            if (_saveAsRoutine)
+              TextField(
+                controller: _routineNameController,
+                maxLength: 100,
+                onChanged: (_) => _persistDraft(),
+                decoration: const InputDecoration(
+                  labelText: 'Routine name',
+                  hintText: 'e.g. Heavy Push Routine',
+                ),
+              ),
             if (widget.muscleGroup != null || widget.muscle != null)
               Card(
                 child: ListTile(
@@ -219,6 +368,33 @@ class _WorkoutLoggingScreenState extends State<WorkoutLoggingScreen> {
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ),
+            if (_presenter.exercises.isNotEmpty)
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Muscle groups',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _presenter.muscleGroups.isEmpty
+                            ? 'No group tags for these exercises yet.'
+                            : _presenter.muscleGroups.join(' • '),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Exercises',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      Text(_presenter.exercises.map((e) => e.name).join(' • ')),
+                    ],
+                  ),
+                ),
+              ),
             const SizedBox(height: 16),
             FilledButton(
               onPressed: _saving || _loadingExercises ? null : _save,
@@ -253,8 +429,10 @@ class _WorkoutLoggingScreenState extends State<WorkoutLoggingScreen> {
               IconButton(
                 tooltip: 'Remove ${exercise.name}',
                 icon: const Icon(Icons.delete_outline),
-                onPressed: () =>
-                    setState(() => _presenter.exercises.remove(exercise)),
+                onPressed: () => setState(() {
+                  _presenter.exercises.remove(exercise);
+                  _persistDraft();
+                }),
               ),
             ],
           ),
@@ -270,7 +448,10 @@ class _WorkoutLoggingScreenState extends State<WorkoutLoggingScreen> {
           for (var i = 0; i < exercise.sets.length; i++) _setRow(exercise, i),
           TextButton.icon(
             onPressed: _presenter.canAddSet
-                ? () => setState(() => exercise.sets.add(WorkoutSet()))
+                ? () => setState(() {
+                    exercise.sets.add(WorkoutSet());
+                    _persistDraft();
+                  })
                 : null,
             icon: const Icon(Icons.add),
             label: const Text('Add set'),
@@ -306,6 +487,7 @@ class _WorkoutLoggingScreenState extends State<WorkoutLoggingScreen> {
               onChanged: (value) => setState(() {
                 set.weight = value;
                 set.completed = false;
+                _persistDraft();
               }),
             ),
           ),
@@ -323,6 +505,7 @@ class _WorkoutLoggingScreenState extends State<WorkoutLoggingScreen> {
               onChanged: (value) => setState(() {
                 set.reps = value;
                 set.completed = false;
+                _persistDraft();
               }),
             ),
           ),
@@ -337,6 +520,7 @@ class _WorkoutLoggingScreenState extends State<WorkoutLoggingScreen> {
               }
               _error = null;
               set.completed = checked ?? false;
+              _persistDraft();
             }),
           ),
           IconButton(
@@ -345,6 +529,7 @@ class _WorkoutLoggingScreenState extends State<WorkoutLoggingScreen> {
             onPressed: () => setState(() {
               exercise.sets.remove(set);
               if (exercise.sets.isEmpty) _presenter.exercises.remove(exercise);
+              _persistDraft();
             }),
           ),
         ],

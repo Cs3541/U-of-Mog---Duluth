@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../models/workout_model.dart';
-import '../presenters/workout_presenter.dart';
+import '../models/exercise_model.dart';
+import '../presenters/logging_presenter.dart';
 import 'routine_screen.dart';
 import 'workout_logging_screen.dart';
 
@@ -13,105 +13,144 @@ class WorkoutsScreen extends StatefulWidget {
 }
 
 class _WorkoutsScreenState extends State<WorkoutsScreen> {
-  final WorkoutPresenter _presenter = WorkoutPresenter();
-  Workout? _selectedWorkout;
-  bool _isLoading = true;
-  bool _isOpening = false;
-  String? _loadError;
-  final Set<String> _deletingWorkoutIds = {};
+  final _model = LoggingModel();
+  List<WorkoutHistoryEntry> _history = [];
+  Map<String, dynamic>? _draft;
+  bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _loadWorkouts();
+    _load();
   }
 
-  Future<void> _loadWorkouts() async {
+  Future<void> _load() async {
     try {
-      await _presenter.loadWorkouts();
+      final results = await Future.wait([
+        _model.loadWorkoutHistory(),
+        LoggingPresenter.loadDraft(),
+      ]);
       if (!mounted) return;
       setState(() {
-        _isLoading = false;
-        _loadError = null;
-        if (!_presenter.workouts.any(
-          (workout) => workout.id == _selectedWorkout?.id,
-        )) {
-          _selectedWorkout = null;
-        }
+        _history = results[0] as List<WorkoutHistoryEntry>;
+        _draft = results[1] as Map<String, dynamic>?;
+        _loading = false;
+        _error = null;
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _isLoading = false;
-        _loadError = error.toString();
+        _loading = false;
+        _error = error.toString();
       });
     }
   }
 
-  Future<void> _addWorkout() async {
-    final details =
-        await showDialog<({String name, String muscleGroup, String muscle})>(
-          context: context,
-          builder: (_) =>
-              _AddWorkoutDialog(musclesByGroup: _presenter.musclesByGroup),
-        );
-
-    if (details == null || !mounted) return;
-
-    try {
-      await _presenter.addWorkout(
-        workoutName: details.name,
-        muscleGroup: details.muscleGroup,
-        muscle: details.muscle,
+  Future<void> _start({
+    WorkoutHistoryEntry? repeat,
+    Map<String, dynamic>? draft,
+    bool edit = false,
+  }) async {
+    if (draft == null && _draft != null) {
+      final choice = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Unfinished workout'),
+          content: const Text(
+            'Resume it or discard it before opening another workout?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'cancel'),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'discard'),
+              child: const Text('Discard and continue'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, 'resume'),
+              child: const Text('Resume'),
+            ),
+          ],
+        ),
       );
+      if (!mounted || choice == null || choice == 'cancel') return;
+      if (choice == 'resume') {
+        await _start(draft: _draft);
+        return;
+      }
+      await LoggingPresenter.clearDraft();
       if (!mounted) return;
-      setState(() {
-        _selectedWorkout = _presenter.workouts.last;
-        _loadError = null;
-      });
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Workout added.')));
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not add workout: $error')));
+      setState(() => _draft = null);
     }
-  }
-
-  Future<void> _logSelectedWorkout() async {
-    final workout = _selectedWorkout;
-    if (workout == null || _isOpening) return;
-
-    setState(() => _isOpening = true);
-    final result = await Navigator.of(context).push<bool>(
+    final exercises = repeat?.exercises ?? const <ExerciseLog>[];
+    final initialDraft = draft == null
+        ? const <Map<String, dynamic>>[]
+        : (draft['exercises'] as List? ?? const [])
+              .whereType<Map>()
+              .map((entry) => Map<String, dynamic>.from(entry))
+              .toList();
+    final completed = edit
+        ? List<bool>.filled(exercises.length, true)
+        : draft == null
+        ? const <bool>[]
+        : (draft['exercises'] as List? ?? const [])
+              .map((item) => item is Map && item['completed'] == true)
+              .toList();
+    final saved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => WorkoutLoggingScreen(
-          workoutName: workout.workoutName,
-          muscleGroup: workout.muscleGroup,
-          muscle: workout.muscle,
+          workoutName: edit
+              ? repeat?.workoutName
+              : draft == null
+              ? null
+              : draft['workoutName'] as String?,
+          initialExercises: exercises,
+          initialCompleted: completed,
+          initialDraft: initialDraft,
+          existingWorkoutId: edit
+              ? repeat?.id
+              : draft?['existingWorkoutId'] as String?,
+          startedAt: edit
+              ? repeat?.completedAt
+              : DateTime.tryParse(draft?['startedAt'] as String? ?? ''),
         ),
       ),
     );
     if (!mounted) return;
-    setState(() => _isOpening = false);
-    if (result == true) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Workout logged.')));
+    if (saved == true) await _load();
+    if (draft != null && mounted) {
+      final restored = await LoggingPresenter.loadDraft();
+      if (mounted) setState(() => _draft = restored);
     }
   }
 
-  Future<void> _deleteWorkout(Workout workout) async {
-    final workoutId = workout.id;
-    if (workoutId == null || _deletingWorkoutIds.contains(workoutId)) return;
+  Future<void> _openHistory() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => WorkoutHistoryScreen(
+          history: _history,
+          onEdit: (entry) {
+            Navigator.of(context).pop();
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _start(repeat: entry, edit: true);
+            });
+          },
+          onDelete: _delete,
+        ),
+      ),
+    );
+    if (mounted) await _load();
+  }
 
-    final confirmed = await showDialog<bool>(
+  Future<void> _delete(WorkoutHistoryEntry entry) async {
+    final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete workout?'),
-        content: Text(
-          'Delete "${workout.workoutName ?? 'Workout'}" from your workouts?',
-        ),
+        title: const Text('Delete this workout?'),
+        content: Text(entry.workoutName),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -124,261 +163,245 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
         ],
       ),
     );
-    if (confirmed != true || !mounted) return;
-
-    setState(() => _deletingWorkoutIds.add(workoutId));
-    try {
-      await _presenter.deleteWorkout(workoutId);
-      if (!mounted) return;
-      setState(() {
-        _deletingWorkoutIds.remove(workoutId);
-        if (_selectedWorkout?.id == workoutId) _selectedWorkout = null;
-      });
+    if (confirm != true) return;
+    final error = await _model.deleteWorkout(entry.id);
+    if (!mounted) return;
+    if (error != null) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Workout deleted.')));
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _deletingWorkoutIds.remove(workoutId));
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not delete workout: $error')),
-      );
+          .showSnackBar(SnackBar(content: Text(error)));
+      return;
     }
+    if (mounted) Navigator.of(context).pop();
   }
 
   @override
-  Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 2,
-      child: Column(
-        children: [
-          const TabBar(
-            labelColor: Colors.green,
-            unselectedLabelColor: Colors.grey,
-            indicatorColor: Colors.green,
-            tabs: [
-              Tab(text: 'Workouts'),
-              Tab(text: 'Routines'),
-            ],
-          ),
-          Expanded(
-            child: TabBarView(
-              children: [_buildWorkoutsContent(), const RoutineScreen()],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWorkoutsContent() {
-    final workouts = _presenter.workouts;
-    return _isLoading
-        ? const Center(child: CircularProgressIndicator())
-        : _loadError != null
-        ? Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('Could not load workouts: $_loadError'),
-                  const SizedBox(height: 12),
-                  OutlinedButton(
-                    onPressed: () {
-                      setState(() {
-                        _isLoading = true;
-                        _loadError = null;
-                      });
-                      _loadWorkouts();
-                    },
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
-            ),
-          )
-        : ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              Text(
-                'Choose a workout',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Select a workout to log, or create a new one.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 16),
-              if (workouts.isEmpty)
-                const Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(20),
-                    child: Text(
-                      'You have no saved workouts yet. Add one to get started.',
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                )
-              else
-                ...workouts.map(_buildWorkoutTile),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: _isOpening ? null : _addWorkout,
-                icon: const Icon(Icons.add),
-                label: const Text('Add workout'),
-              ),
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: _selectedWorkout == null || _isOpening
-                    ? null
-                    : _logSelectedWorkout,
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                ),
-                icon: const Icon(Icons.play_arrow),
-                label: Text(
-                  _isOpening
-                      ? 'Opening…'
-                      : _selectedWorkout == null
-                      ? 'Select a workout to log'
-                      : 'Log ${_selectedWorkout!.workoutName ?? 'workout'}',
-                ),
-              ),
-            ],
-          );
-  }
-
-  Widget _buildWorkoutTile(Workout workout) {
-    final selected = _selectedWorkout?.id == workout.id;
-    final details = [
-      workout.muscleGroup,
-      workout.muscle,
-    ].whereType<String>().where((value) => value.isNotEmpty).join(' • ');
-
-    return Card(
-      child: ListTile(
-        selected: selected,
-        onTap: () => setState(() => _selectedWorkout = workout),
-        leading: const CircleAvatar(child: Icon(Icons.fitness_center)),
-        title: Text(workout.workoutName ?? 'Workout'),
-        subtitle: details.isEmpty ? null : Text(details),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              selected
-                  ? Icons.radio_button_checked
-                  : Icons.radio_button_unchecked,
-              color: selected ? Theme.of(context).colorScheme.primary : null,
-            ),
-            if (workout.id != null)
-              IconButton(
-                tooltip: 'Delete ${workout.workoutName ?? 'workout'}',
-                onPressed: _deletingWorkoutIds.contains(workout.id)
-                    ? null
-                    : () => _deleteWorkout(workout),
-                icon: _deletingWorkoutIds.contains(workout.id)
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.delete_outline),
-              ),
+  Widget build(BuildContext context) => DefaultTabController(
+    length: 2,
+    child: Column(
+      children: [
+        const TabBar(
+          labelColor: Colors.green,
+          unselectedLabelColor: Colors.grey,
+          indicatorColor: Colors.green,
+          tabs: [
+            Tab(text: 'Workouts'),
+            Tab(text: 'Routines'),
           ],
         ),
-      ),
+        Expanded(
+          child: TabBarView(children: [_workoutsTab(), const RoutineScreen()]),
+        ),
+      ],
+    ),
+  );
+
+  Widget _workoutsTab() {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Could not load workout history.'),
+            TextButton(
+              onPressed: () {
+                setState(() => _loading = true);
+                _load();
+              },
+              child: const Text('Try again'),
+            ),
+          ],
+        ),
+      );
+    }
+    final recent = _history.take(20).toList();
+    return ListView(
+      padding: const EdgeInsets.only(top: 20, bottom: 24),
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: FilledButton.icon(
+            onPressed: () => _start(),
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('Start workout'),
+            style: FilledButton.styleFrom(backgroundColor: Colors.green),
+          ),
+        ),
+        if (_draft != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+            child: OutlinedButton.icon(
+              onPressed: () => _start(draft: _draft),
+              icon: const Icon(Icons.restore),
+              label: const Text('Resume unfinished workout'),
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Recent workouts',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+              TextButton(
+                onPressed: _openHistory,
+                child: const Text('View history'),
+              ),
+            ],
+          ),
+        ),
+        if (recent.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(20),
+            child: Text(
+              'Your completed workouts will appear here.',
+              textAlign: TextAlign.center,
+            ),
+          )
+        else
+          SizedBox(
+            height: 186,
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              scrollDirection: Axis.horizontal,
+              itemCount: recent.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 12),
+              itemBuilder: (context, index) => SizedBox(
+                width: 270,
+                child: _historyCard(recent[index], compact: true),
+              ),
+            ),
+          ),
+        if (_history.length > 20)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Text(
+              'Showing the latest 20. View history to see older workouts.',
+            ),
+          ),
+      ],
     );
   }
-}
 
-class _AddWorkoutDialog extends StatefulWidget {
-  const _AddWorkoutDialog({required this.musclesByGroup});
+  Widget _historyCard(WorkoutHistoryEntry entry, {bool compact = false}) =>
+      Card(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                entry.workoutName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              Text(
+                _date(entry.completedAt),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              if (entry.muscleGroups.isNotEmpty)
+                Text(
+                  entry.muscleGroups.join(' • '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              Expanded(
+                child: Text(
+                  entry.exercises
+                      .map((set) => set.exerciseName)
+                      .toSet()
+                      .join(' • '),
+                  maxLines: compact ? 2 : 4,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () => _start(repeat: entry),
+                  icon: const Icon(Icons.replay, size: 18),
+                  label: const Text('Repeat'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
 
-  final Map<String, List<String>> musclesByGroup;
-
-  @override
-  State<_AddWorkoutDialog> createState() => _AddWorkoutDialogState();
-}
-
-class _AddWorkoutDialogState extends State<_AddWorkoutDialog> {
-  final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  String? _selectedGroup;
-  String? _selectedMuscle;
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    super.dispose();
+  String _date(DateTime? date) {
+    if (date == null) return 'Date unavailable';
+    final local = date.toLocal();
+    return '${local.month}/${local.day}/${local.year}';
   }
+}
+
+class WorkoutHistoryScreen extends StatelessWidget {
+  const WorkoutHistoryScreen({
+    required this.history,
+    required this.onEdit,
+    required this.onDelete,
+    super.key,
+  });
+
+  final List<WorkoutHistoryEntry> history;
+  final ValueChanged<WorkoutHistoryEntry> onEdit;
+  final ValueChanged<WorkoutHistoryEntry> onDelete;
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Add workout'),
-    content: Form(
-      key: _formKey,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextFormField(
-            controller: _nameController,
-            autofocus: true,
-            maxLength: 100,
-            decoration: const InputDecoration(labelText: 'Workout name'),
-            validator: (value) => value == null || value.trim().isEmpty
-                ? 'Enter a workout name'
-                : null,
-          ),
-          DropdownButtonFormField<String>(
-            initialValue: _selectedGroup,
-            decoration: const InputDecoration(labelText: 'Muscle group'),
-            items: [
-              for (final group in widget.musclesByGroup.keys)
-                DropdownMenuItem(value: group, child: Text(group)),
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Workout history')),
+    body: history.isEmpty
+        ? const Center(child: Text('No completed workouts yet.'))
+        : ListView(
+            padding: const EdgeInsets.all(12),
+            children: [
+              for (final entry in history)
+                Card(
+                  child: ExpansionTile(
+                    title: Text(entry.workoutName),
+                    subtitle: Text(
+                      [
+                        _localDate(entry.completedAt),
+                        if (entry.muscleGroups.isNotEmpty)
+                          entry.muscleGroups.join(' • '),
+                      ].join(' • '),
+                    ),
+                    children: [
+                      for (final set in entry.exercises)
+                        ListTile(
+                          dense: true,
+                          title: Text(set.exerciseName),
+                          subtitle: Text('${set.reps} reps • ${set.weight} lb'),
+                        ),
+                      OverflowBar(
+                        alignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton.icon(
+                            onPressed: () => onEdit(entry),
+                            icon: const Icon(Icons.edit),
+                            label: const Text('Edit'),
+                          ),
+                          TextButton.icon(
+                            onPressed: () => onDelete(entry),
+                            icon: const Icon(Icons.delete_outline),
+                            label: const Text('Delete'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
             ],
-            validator: (value) =>
-                value == null ? 'Select a muscle group' : null,
-            onChanged: (group) => setState(() {
-              _selectedGroup = group;
-              _selectedMuscle = null;
-            }),
           ),
-          DropdownButtonFormField<String>(
-            key: ValueKey(_selectedGroup),
-            initialValue: _selectedMuscle,
-            decoration: const InputDecoration(labelText: 'Muscle'),
-            items: [
-              for (final muscle
-                  in widget.musclesByGroup[_selectedGroup] ?? const <String>[])
-                DropdownMenuItem(value: muscle, child: Text(muscle)),
-            ],
-            validator: (value) => value == null ? 'Select a muscle' : null,
-            onChanged: _selectedGroup == null
-                ? null
-                : (muscle) => setState(() => _selectedMuscle = muscle),
-          ),
-        ],
-      ),
-    ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('Cancel'),
-      ),
-      FilledButton(
-        onPressed: () {
-          if (!_formKey.currentState!.validate()) return;
-          Navigator.pop(context, (
-            name: _nameController.text.trim(),
-            muscleGroup: _selectedGroup!,
-            muscle: _selectedMuscle!,
-          ));
-        },
-        child: const Text('Save'),
-      ),
-    ],
   );
+
+  String _localDate(DateTime? date) {
+    if (date == null) return 'Date unavailable';
+    final local = date.toLocal();
+    return '${local.month}/${local.day}/${local.year}';
+  }
 }

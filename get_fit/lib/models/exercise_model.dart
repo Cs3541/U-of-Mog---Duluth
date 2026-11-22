@@ -2,17 +2,28 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class LoggingModel {
-  Future<List<String>> loadCommonExercises() async {
+  Future<ExerciseCatalog> loadCatalog() async {
     final document = await FirebaseFirestore.instance
         .collection('baseExercises')
         .doc('exercises')
         .get();
-    final names = document.data()?.keys.toList() ?? <String>[];
+    final data = document.data() ?? <String, dynamic>{};
+    final names = data.keys.toList();
     if (names.any((name) => name.trim().isEmpty || name.length > 100)) {
       throw StateError('Exercise names must contain 1–100 characters.');
     }
     names.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    return names;
+    final groups = <String, List<String>>{};
+    for (final entry in data.entries) {
+      if (entry.value is List) {
+        groups[entry.key] = (entry.value as List).whereType<String>().toList();
+      }
+    }
+    return ExerciseCatalog(names: names, muscleGroups: groups);
+  }
+
+  Future<List<String>> loadCommonExercises() async {
+    return (await loadCatalog()).names;
   }
 
   static const maxWorkoutSets = 100;
@@ -70,18 +81,98 @@ class LoggingModel {
     }
   }
 
-  Future<String?> saveWorkout(
-    String workoutName,
-    List<ExerciseLog> exercises,
-  ) async {
+  Future<List<WorkoutHistoryEntry>> loadWorkoutHistory() async {
+    final user = _auth.currentUser;
+    if (user == null) throw StateError('Please sign in first.');
+
+    final snapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('workoutLogs')
+        .orderBy('completedAt', descending: true)
+        .get(const GetOptions(source: Source.server));
+    final catalog = await loadCatalog();
+    final history = <WorkoutHistoryEntry>[];
+
+    for (final document in snapshot.docs) {
+      final data = document.data();
+      final rawExercises = data['exercises'];
+      final entries = <Map<String, dynamic>>[];
+      if (rawExercises is List) {
+        entries.addAll(rawExercises.whereType<Map<String, dynamic>>());
+      } else {
+        final sets = await document.reference
+            .collection('sets')
+            .orderBy(FieldPath.documentId)
+            .get(const GetOptions(source: Source.server));
+        entries.addAll(sets.docs.map((set) => set.data()));
+      }
+
+      final exerciseLogs = <ExerciseLog>[];
+      for (final entry in entries) {
+        final name = entry['exerciseName'];
+        final setCount = entry['sets'];
+        final reps = entry['reps'];
+        final weight = entry['weight'];
+        if (name is! String ||
+            setCount is! int ||
+            reps is! int ||
+            weight is! num) {
+          continue;
+        }
+        for (
+          var i = 0;
+          i < setCount && exerciseLogs.length < maxWorkoutSets;
+          i++
+        ) {
+          exerciseLogs.add(
+            ExerciseLog(
+              exerciseName: name,
+              sets: 1,
+              reps: reps,
+              weight: weight.toDouble(),
+            ),
+          );
+        }
+      }
+
+      final savedGroups = data['muscleGroups'];
+      final groups = savedGroups is List
+          ? savedGroups.whereType<String>().toSet()
+          : <String>{
+              for (final exercise in exerciseLogs)
+                ..._groupsFor(catalog, exercise.exerciseName),
+            };
+      history.add(
+        WorkoutHistoryEntry(
+          id: document.id,
+          workoutName: data['workoutName'] as String? ?? 'Workout',
+          completedAt: (data['completedAt'] as Timestamp?)?.toDate(),
+          muscleGroups: groups.toList()..sort(),
+          exercises: exerciseLogs,
+        ),
+      );
+    }
+    return history;
+  }
+
+  Future<String?> saveWorkout({
+    String? workoutName,
+    String? routineName,
+    String? existingWorkoutId,
+    required DateTime startedAt,
+    required List<ExerciseLog> exercises,
+    required List<String> muscleGroups,
+  }) async {
     final user = _auth.currentUser;
 
     if (user == null) return 'Please sign in first.';
-    if (workoutName.trim().isEmpty ||
-        workoutName.trim().length > 100 ||
+    if ((workoutName?.trim().length ?? 0) > 100 ||
+        (routineName?.trim().isEmpty ?? false) ||
+        (routineName?.trim().length ?? 0) > 100 ||
         exercises.isEmpty ||
         exercises.length > maxWorkoutSets) {
-      return 'A workout needs a label and 1–$maxWorkoutSets set entries.';
+      return 'Add 1–$maxWorkoutSets sets and use names under 100 characters.';
     }
 
     for (final exercise in exercises) {
@@ -99,37 +190,132 @@ class LoggingModel {
 
     try {
       final firestore = FirebaseFirestore.instance;
-      final workout = firestore
+      final workouts = firestore
           .collection('users')
           .doc(user.uid)
-          .collection('workoutLogs')
-          .doc();
+          .collection('workoutLogs');
+      final workout = existingWorkoutId == null
+          ? workouts.doc()
+          : workouts.doc(existingWorkoutId);
+      final name = workoutName?.trim().isNotEmpty == true
+          ? workoutName!.trim()
+          : _defaultWorkoutName(startedAt, exercises);
+      final groups = muscleGroups.toSet().toList()..sort();
       final batch = firestore.batch();
-      batch.set(workout, {
-        'workoutName': workoutName.trim(),
-        'completedAt': FieldValue.serverTimestamp(),
-        'weightUnit': 'lb',
-        'setCount': exercises.length,
-      });
+      List<QueryDocumentSnapshot<Map<String, dynamic>>> oldSets = [];
+      if (existingWorkoutId == null) {
+        batch.set(workout, {
+          'workoutName': name,
+          'completedAt': FieldValue.serverTimestamp(),
+          'weightUnit': 'lb',
+          'setCount': exercises.length,
+          'muscleGroups': groups,
+        });
+      } else {
+        oldSets =
+            (await workout
+                    .collection('sets')
+                    .orderBy(FieldPath.documentId)
+                    .get())
+                .docs;
+        batch.update(workout, {
+          'workoutName': name,
+          'setCount': exercises.length,
+          'muscleGroups': groups,
+          'exercises': FieldValue.delete(),
+        });
+      }
       for (var i = 0; i < exercises.length; i++) {
         final exercise = exercises[i];
-        batch.set(
-          workout.collection('sets').doc(i.toString().padLeft(3, '0')),
-          {
-            'exerciseName': exercise.exerciseName.trim(),
-            'sets': 1,
-            'reps': exercise.reps,
-            'weight': exercise.weight,
-          },
-        );
+        final set = {
+          'exerciseName': exercise.exerciseName.trim(),
+          'sets': 1,
+          'reps': exercise.reps,
+          'weight': exercise.weight,
+        };
+        if (i < oldSets.length) {
+          batch.set(oldSets[i].reference, set);
+        } else {
+          batch.set(
+            workout.collection('sets').doc(i.toString().padLeft(3, '0')),
+            set,
+          );
+        }
+      }
+      for (final set in oldSets.skip(exercises.length)) {
+        batch.delete(set.reference);
+      }
+      if (routineName != null) {
+        final routine = firestore
+            .collection('users')
+            .doc(user.uid)
+            .collection('routines')
+            .doc();
+        batch.set(routine, {
+          'routineName': routineName.trim(),
+          'createdAt': FieldValue.serverTimestamp(),
+          'muscleGroups': groups,
+          'exercises': [
+            for (final exercise in exercises)
+              {
+                'exerciseName': exercise.exerciseName.trim(),
+                'sets': 1,
+                'reps': exercise.reps,
+                'weight': exercise.weight,
+              },
+          ],
+        });
       }
       // Commit the workout and every set together, so a failed save leaves no partial workout.
       await batch.commit();
 
-      return null; // No error: Firebase accepted the save.
+      return null;
     } on FirebaseException catch (error) {
       return error.message ?? 'Could not save workout.';
     }
+  }
+
+  Future<String?> deleteWorkout(String workoutId) async {
+    final user = _auth.currentUser;
+    if (user == null) return 'Please sign in first.';
+    try {
+      final workout = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('workoutLogs')
+          .doc(workoutId);
+      final sets = await workout.collection('sets').get();
+      final batch = FirebaseFirestore.instance.batch();
+      for (final set in sets.docs) {
+        batch.delete(set.reference);
+      }
+      batch.delete(workout);
+      await batch.commit();
+      return null;
+    } on FirebaseException catch (error) {
+      return error.message ?? 'Could not delete workout.';
+    }
+  }
+
+  String _defaultWorkoutName(DateTime date, List<ExerciseLog> exercises) {
+    final dateText = '${date.month}/${date.day}/${date.year}';
+    final names = <String>[];
+    for (final exercise in exercises) {
+      if (!names.contains(exercise.exerciseName))
+        names.add(exercise.exerciseName);
+      if (names.length == 2) break;
+    }
+    final suffix = names.join(' + ');
+    final name = suffix.isEmpty ? 'Workout $dateText' : '$dateText • $suffix';
+    return name.length <= 100 ? name : name.substring(0, 100);
+  }
+
+  static List<String> _groupsFor(ExerciseCatalog catalog, String exerciseName) {
+    final name = exerciseName.trim().toLowerCase();
+    for (final entry in catalog.muscleGroups.entries) {
+      if (entry.key.trim().toLowerCase() == name) return entry.value;
+    }
+    return const [];
   }
 
   // Log an exercise session with a specific exercise name and duration
@@ -196,6 +382,29 @@ class ExerciseTimer extends DurationTimer {
 
 /// Optional timer for tracking an entire workout.
 class WorkoutTimer extends DurationTimer {}
+
+class ExerciseCatalog {
+  const ExerciseCatalog({required this.names, required this.muscleGroups});
+
+  final List<String> names;
+  final Map<String, List<String>> muscleGroups;
+}
+
+class WorkoutHistoryEntry {
+  const WorkoutHistoryEntry({
+    required this.id,
+    required this.workoutName,
+    required this.completedAt,
+    required this.muscleGroups,
+    required this.exercises,
+  });
+
+  final String id;
+  final String workoutName;
+  final DateTime? completedAt;
+  final List<String> muscleGroups;
+  final List<ExerciseLog> exercises;
+}
 
 // Each new entry is one set. Older saved entries may group identical sets.
 class ExerciseLog {
