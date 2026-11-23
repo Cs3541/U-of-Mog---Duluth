@@ -35,5 +35,6 @@ void main() {
 
       expect(chart.analyze().nextWeekVolume, 0);
     });
+
   });
 }

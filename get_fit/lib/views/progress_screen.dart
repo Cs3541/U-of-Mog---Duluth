@@ -46,11 +46,11 @@ class ProgressScreenState extends State<ProgressScreen> {
 
     final analysis = chart.analyze();
     final content = analysis.hasData
-        ? 'Trend: ${analysis.trend.toLowerCase()}'
-              '${analysis.trend == 'Stable' ? '' : ' by about ${_formatVolume(analysis.weeklyChange.abs())} lbs per week'}.\n\n'
-              'Predicted volume next week: ${_formatVolume(analysis.nextWeekVolume)} lbs.\n\n'
-              'This estimate uses a linear trend from the last ${chart.weeklyVolumes.length} weeks; actual results may vary.'
-        : 'There is not enough workout data from the last five weeks to identify a trend or predict next week\'s volume.';
+        ? 'You\'re ${analysis.trend.toLowerCase()}'
+              '${analysis.trend == 'Stable' ? ' for now' : ' by about ${_formatVolume(analysis.weeklyChange.abs())} lbs each week'}.\n\n'
+              'Next week, your workout volume could reach about ${_formatVolume(analysis.nextWeekVolume)} lbs.\n\n'
+              'This is an estimate based on your last ${chart.weeklyVolumes.length} weeks. Results can vary.'
+        : 'We don\'t have enough workout data from the last five weeks yet to spot a trend or make a next-week estimate. Keep logging workouts and check back soon!';
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -125,7 +125,7 @@ class ProgressScreenState extends State<ProgressScreen> {
             controller: controller,
             decoration: const InputDecoration(labelText: 'Legend name'),
             maxLength: 30,
-            validator: _validateLabel,
+            validator: _validateLegendLabel,
           ),
         ),
         actions: [
@@ -212,6 +212,13 @@ class ProgressScreenState extends State<ProgressScreen> {
     return null;
   }
 
+  String? _validateLegendLabel(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Enter a legend name.';
+    }
+    return null;
+  }
+
   Future<void> _selectGraphType() async {
     final selectedType = await showDialog<_ProgressGraphType>(
       context: context,
@@ -287,6 +294,9 @@ class ProgressScreenState extends State<ProgressScreen> {
       body: StreamBuilder<ProgressChartData>(
         stream: _chart,
         builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const Center(child: Text('Unable to load progress data.'));
+          }
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
@@ -343,9 +353,12 @@ class ProgressScreenState extends State<ProgressScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'Weeks',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                Text(
+                  _xAxisName,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
                 ),
                 if (!chart.hasWorkouts)
                   const Padding(
@@ -369,13 +382,6 @@ class ProgressScreenState extends State<ProgressScreen> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  _xAxisName,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                  ),
-                ),
                 const SizedBox(height: 18),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,

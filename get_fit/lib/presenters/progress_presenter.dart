@@ -45,11 +45,15 @@ class ProgressChartData {
   }
 
   ProgressGraphAnalysis analyze() {
-    if (!hasWorkouts || weeklyVolumes.isEmpty) {
+    if (!hasWorkouts || weeklyVolumes.length < 2) {
       return const ProgressGraphAnalysis(hasData: false);
     }
 
     final count = weeklyVolumes.length;
+    if (weeklyVolumes.any((volume) => !volume.isFinite || volume < 0)) {
+      return const ProgressGraphAnalysis(hasData: false);
+    }
+
     final meanX = (count - 1) / 2;
     final meanY = weeklyVolumes.reduce((a, b) => a + b) / count;
     var covariance = 0.0;
