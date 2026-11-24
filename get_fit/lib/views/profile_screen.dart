@@ -4,9 +4,11 @@ import '../models/exp_model.dart';
 import '../models/friend_model.dart';
 import '../models/profile_model.dart';
 import '../presenters/auth_presenter.dart';
+import '../presenters/broadcast_presenter.dart';
 import '../presenters/exp_presenter.dart';
 import '../presenters/friend_presenter.dart';
 import '../presenters/profile_presenter.dart';
+import 'broadcast_screen.dart';
 import 'friend_screen.dart';
 import 'login_screen.dart';
 
@@ -42,6 +44,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final ExpPresenter _expPresenter = ExpPresenter();
   final ProfilePresenter _profilePresenter = ProfilePresenter();
   final FriendsPresenter _friendsPresenter = FriendsPresenter();
+  final BroadcastPresenter _broadcastPresenter = BroadcastPresenter();
   final TextEditingController _nameController = TextEditingController();
 
   late final String _email = _presenter.getCurrentUserEmail() ?? 'Unknown User';
@@ -52,6 +55,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _uid.isEmpty ? null : _expPresenter.watchExp(_uid);
   late final Stream<List<FriendRequest>> _incomingStream =
       _friendsPresenter.watchIncoming();
+  late final Stream<bool> _isAdminStream = _broadcastPresenter.watchIsAdmin();
 
   bool _nameLoaded = false;
   bool _busy = false;
@@ -152,6 +156,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const FriendsScreen()),
+                  ),
+                ),
+              );
+            },
+          ),
+          StreamBuilder<bool>(
+            stream: _isAdminStream,
+            builder: (context, snapshot) {
+              if (snapshot.data != true) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: Card(
+                  elevation: 4,
+                  color: Colors.blue.shade50,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: ListTile(
+                    leading: const Icon(Icons.campaign, color: Colors.blue),
+                    title: const Text('Send Broadcast'),
+                    subtitle: const Text('Admin: notify all users'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const BroadcastScreen()),
+                    ),
                   ),
                 ),
               );
