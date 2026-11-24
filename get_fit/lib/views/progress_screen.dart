@@ -49,7 +49,7 @@ class ProgressScreenState extends State<ProgressScreen> {
         ? 'You\'re ${analysis.trend.toLowerCase()}'
               '${analysis.trend == 'Stable' ? ' for now' : ' by about ${_formatVolume(analysis.weeklyChange.abs())} lbs each week'}.\n\n'
               'Next week, your workout volume could reach about ${_formatVolume(analysis.nextWeekVolume)} lbs.\n\n'
-              'This is an estimate based on your last ${chart.weeklyVolumes.length} weeks. Results can vary.'
+              'This is an estimate based on your last ${chart.weeklyVolumes.length} weeks. Actual results can vary.'
         : 'We don\'t have enough workout data from the last five weeks yet to spot a trend or make a next-week estimate. Keep logging workouts and check back soon!';
     await showDialog<void>(
       context: context,
