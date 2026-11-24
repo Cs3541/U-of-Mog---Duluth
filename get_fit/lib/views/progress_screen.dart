@@ -24,6 +24,52 @@ class ProgressScreenState extends State<ProgressScreen> {
   String _yAxisName = 'Volume (lbs)';
   String _legendName = 'Progress';
 
+  Future<void> _promptGraphAnalysis(ProgressChartData chart) async {
+    final shouldAnalyze = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Analyze your graph?'),
+        content: const Text('Would you like to run an analysis of your graph?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('No'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Yes'),
+          ),
+        ],
+      ),
+    );
+    if (shouldAnalyze != true || !mounted) return;
+
+    final analysis = chart.analyze();
+    final content = analysis.hasData
+        ? 'You\'re ${analysis.trend.toLowerCase()}'
+              '${analysis.trend == 'Stable' ? ' for now' : ' by about ${_formatVolume(analysis.weeklyChange.abs())} lbs each week'}.\n\n'
+              'Next week, your workout volume could reach about ${_formatVolume(analysis.nextWeekVolume)} lbs.\n\n'
+              'This is an estimate based on your last ${chart.weeklyVolumes.length} weeks. Actual results can vary.'
+        : 'We don\'t have enough workout data from the last five weeks yet to spot a trend or make a next-week estimate. Keep logging workouts and check back soon!';
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Graph analysis'),
+        content: Text(content),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatVolume(double volume) => volume == volume.roundToDouble()
+      ? volume.toInt().toString()
+      : volume.toStringAsFixed(1);
+
   Future<void> _customizeGraph() async {
     final customization = await showDialog<_ProgressCustomization>(
       context: context,
@@ -79,7 +125,7 @@ class ProgressScreenState extends State<ProgressScreen> {
             controller: controller,
             decoration: const InputDecoration(labelText: 'Legend name'),
             maxLength: 30,
-            validator: _validateLabel,
+            validator: _validateLegendLabel,
           ),
         ),
         actions: [
@@ -166,6 +212,13 @@ class ProgressScreenState extends State<ProgressScreen> {
     return null;
   }
 
+  String? _validateLegendLabel(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Enter a legend name.';
+    }
+    return null;
+  }
+
   Future<void> _selectGraphType() async {
     final selectedType = await showDialog<_ProgressGraphType>(
       context: context,
@@ -241,6 +294,9 @@ class ProgressScreenState extends State<ProgressScreen> {
       body: StreamBuilder<ProgressChartData>(
         stream: _chart,
         builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const Center(child: Text('Unable to load progress data.'));
+          }
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
@@ -281,7 +337,10 @@ class ProgressScreenState extends State<ProgressScreen> {
                       Expanded(
                         child: LineGraph(
                           features: [feature],
-                          size: Size(MediaQuery.sizeOf(context).width - 80, 300),
+                          size: Size(
+                            MediaQuery.sizeOf(context).width - 80,
+                            300,
+                          ),
                           labelX: chart.weekLabels,
                           labelY: chart.volumeLabels,
                           graphOpacity: _graphType == _ProgressGraphType.area
@@ -294,9 +353,12 @@ class ProgressScreenState extends State<ProgressScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'Weeks',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                Text(
+                  _xAxisName,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
                 ),
                 if (!chart.hasWorkouts)
                   const Padding(
@@ -320,13 +382,6 @@ class ProgressScreenState extends State<ProgressScreen> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  _xAxisName,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                  ),
-                ),
                 const SizedBox(height: 18),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -337,7 +392,7 @@ class ProgressScreenState extends State<ProgressScreen> {
                     ),
                     const SizedBox(width: 12),
                     ElevatedButton(
-                      onPressed: () {},
+                      onPressed: () => _promptGraphAnalysis(chart),
                       child: const Text('Analysis'),
                     ),
                     const SizedBox(width: 12),
