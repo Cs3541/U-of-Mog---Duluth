@@ -6,6 +6,7 @@ import '../models/feed_model.dart';
 import '../repositories/event_repository.dart';
 import '../presenters/home_presenter.dart';
 import '../views/friend_alerts.dart';
+import '../views/broadcast_alerts.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -236,6 +237,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 16),
             _buildUpcomingEventsButton(),
             const SizedBox(height: 16),
+            const BroadcastAlerts(),
             const FriendAlerts(),
             if (_expStream != null) _buildLevelCard(),
             if (_feedStream != null) ...[
